@@ -24,10 +24,12 @@ Library
   Ghc-options:      -Wall
 
   Exposed-modules:
-    ICFP2019.Main.V0
+    ICFP2019.Main.V0,
+    ICFP2019.Main.Sim
 
   other-modules:
-    ICFP2019.State
+    ICFP2019.State,
+    ICFP2019.Action
 
   Build-depends:
     base,
@@ -47,3 +49,7 @@ Common exe
 Executable icfp2019-v0
   Import:  exe
   Main-is: V0.hs
+
+Executable sim
+  Import:  exe
+  Main-is: Sim.hs

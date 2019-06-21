@@ -33,6 +33,8 @@ data Booster
 
 instance Hashable Booster
 
+
+-- INVARIANT: wrapped and blocked should be mutually exclusive
 data MineState = MineState
   { _wwPosition :: !Point
   , _wwManipulators :: !(HashSet RelPos)
@@ -47,11 +49,13 @@ data MineState = MineState
   , _corner1 :: !Point
   } deriving (Show)
 
+
 makeLenses ''MineState
 
 data ActionException
   = NoBooster
   | CantAttachManipulator
+  deriving (Show)
 
 initialParser :: AP.Parser MineState
 initialParser = do
@@ -62,9 +66,9 @@ initialParser = do
     walls <- AP.sepBy quadParser (AP.char ';')
     _ <- AP.char '#'
     boos <- AP.sepBy boosterParser (AP.char ';')
-    return $ MineState
+    return $ applyWrapped $ MineState
       { _wwPosition = wwPos
-      , _wwManipulators = HS.fromList [V2 0 0, V2 1 0, V2 1 1, V2 1 (-1)]
+      , _wwManipulators = startingManip
       , _wrapped = mempty
       , _blocked = HS.fromList [ V2 x y | (V2 mX0 mY0, V2 mX1 mY1) <- walls, x <- [mX0..mX1-1], y <- [mY0..mY1-1] ]
       , _corner0 = c0
@@ -76,6 +80,7 @@ initialParser = do
       , _timeSpent = 0
       }
   where
+    startingManip = HS.fromList [V2 0 0, V2 1 0, V2 1 1, V2 1 (-1)]
     boosterParser = do
       whichBooster <- AP.char 'B' *> pure Extension
         <|> AP.char 'F' *> pure FastWheels
@@ -125,7 +130,7 @@ step state0 act = case act of
     else Left NoBooster
   AttachDrill -> if HM.lookupDefault 0 Drill (state0 ^. collectedBoosters) > 0
     then Right $ tickTime $ state0
-      & activeFastWheels %~ max 30
+      & activeDrill %~ max 30
       & collectedBoosters %~ HM.adjust pred Drill
     else Left NoBooster
   AttachManipulator rp -> if HM.lookupDefault 0 Extension (state0 ^. collectedBoosters) > 0
@@ -155,7 +160,16 @@ passable pt state0 = inMine && (notWall || hasDrill)
     hasDrill = state0 ^. activeDrill > 0
     inMine = x >= x0 && x < x1 && y >= y0 && y < y1
     notWall = not $ HS.member pt (view blocked state0)
-    V2 x y = state0 ^. wwPosition
+    V2 x y = pt
+    V2 x0 y0 = state0 ^. corner0
+    V2 x1 y1 = state0 ^. corner1
+
+wrappable :: MineState -> Point -> Bool
+wrappable state0 pt = inMine && notWall
+  where
+    inMine = x >= x0 && x < x1 && y >= y0 && y < y1
+    notWall = not $ HS.member pt (view blocked state0)
+    V2 x y = pt
     V2 x0 y0 = state0 ^. corner0
     V2 x1 y1 = state0 ^. corner1
 
@@ -163,13 +177,38 @@ movePosition :: RelPos -> MineState -> MineState
 movePosition rp state0 =
   if passable pt state0
     then getBooster pt $
-      state0
-        & wwPosition .~ pt
-        & wrapped %~ (`HS.union` (HS.map (+ pt) $ state0 ^. wwManipulators)) -- TODO: We need to check line of sight here
-        & blocked %~ HS.delete pt
+      applyWrapped $ state0
+            & wwPosition .~ pt
+            & blocked %~ HS.delete pt
     else state0
   where
     pt = rp + state0 ^. wwPosition
+
+applyWrapped :: MineState -> MineState
+applyWrapped state0 = state0 & wrapped %~ HS.union (HS.filter (wrappable state0) $ HS.map (+ state0 ^. wwPosition) $ state0 ^. wwManipulators) -- TODO: We need to check line of sight here
+
+allWrapped :: MineState -> Bool
+allWrapped state0 = if HS.size (HS.intersection (state0 ^. blocked) (state0 ^. wrapped)) > 0
+  then error "allWrapped: invariant broken"
+  else case compare (HS.size (state0 ^. blocked) + HS.size (state0 ^. wrapped)) (numTiles state0) of
+    LT -> False
+    EQ -> True
+    GT -> error $ "allWrapped: Should be impossible: " ++ show state0
+
+numTiles :: MineState -> Int
+numTiles state0 = (y1 - y0) * (x1 - x0)
+  where
+    V2 x0 y0 = state0 ^. corner0
+    V2 x1 y1 = state0 ^. corner1
+
+allTiles :: MineState -> HashSet Point
+allTiles state0 = HS.fromList [V2 x y | x <- [x0..x1-1], y<- [y0..y1-1]]
+  where
+    V2 x0 y0 = state0 ^. corner0
+    V2 x1 y1 = state0 ^. corner1
+
+missingTiles :: MineState -> HashSet Point
+missingTiles state0 = HS.difference (HS.difference (allTiles state0) (state0 ^. wrapped)) (state0 ^. blocked)
 
 getBooster :: Point -> MineState -> MineState
 getBooster pt state0 = case HM.lookup pt $ state0 ^. boosters of
