@@ -15,17 +15,17 @@ main = do
   [desc] <- getArgs
   descBs <- C8.readFile desc
   let Right state0 = AP.parseOnly initialParser descBs
+  hSetBuffering stdout NoBuffering
   go state0
   putStrLn ""
   where
     go st
       | allWrapped st = putStrLn ""
       | otherwise = do
-          foo <- boundedDfs (\st -> pure (remainingTiles st, costHeuristic st)) 5 st
+          foo <- boundedDfs (\st -> pure (remainingTiles st, costHeuristic st)) 3 st
           case foo of
             (x Seq.:<| _, _) -> do
               putStr $ serialize x
-              hFlush stdout
               go (either (error "impossible") id $ step st x)
 --   go state0 undefin
 
