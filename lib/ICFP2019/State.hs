@@ -9,6 +9,7 @@ import Control.Lens
 import qualified Data.Attoparsec.ByteString.Char8 as AP
 import Data.Hashable
 import qualified Data.HashMap.Lazy as HM
+import Data.List (foldl')
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashSet as HS
 import Data.HashSet (HashSet)
@@ -45,7 +46,6 @@ makeLenses ''MineProblem
 data MineState = MineState
   { _wwPosition :: !Point
   , _wwManipulators :: !(HashSet RelPos)
-  , _wrapped :: !(HashSet Point)
   , _unwrapped :: !(HashSet Point)
   , _blocked :: !(HashSet Point)
   , _boosters :: !(HashMap Point Booster)
@@ -79,7 +79,6 @@ initialParser = do
     let initialSt = applyWrapped mineProb $ MineState
           { _wwPosition = wwPos
           , _wwManipulators = startingManip
-          , _wrapped = wrap
           , _unwrapped = HS.difference (HS.difference (allTiles boundary0) wrap) blok
           , _blocked = blok
           , _boosters = HM.fromList boos
@@ -179,15 +178,13 @@ movePosition rp prob state0 =
 
 applyWrapped :: MineProblem -> MineState -> MineState
 applyWrapped prob state0 = state0
-  & wrapped %~ HS.union diff
-  & unwrapped %~ (\uw -> HS.difference uw diff)
+  & unwrapped %~ (kill diff)
   where
     diff = HS.filter (open prob state0) $ HS.map (+ state0 ^. wwPosition) $ state0 ^. wwManipulators -- TODO: We need to check line of sight here
+    kill victims uw = foldl' (flip HS.delete) uw victims
 
 allWrapped :: MineState -> Bool
-allWrapped state0 = if HS.size (HS.intersection (state0 ^. blocked) (state0 ^. wrapped)) > 0
-  then error "allWrapped: invariant broken"
-  else HS.null (state0 ^. unwrapped)
+allWrapped = HS.null . view unwrapped
 
 remainingTiles :: MineState -> Int
 remainingTiles state0 = HS.size (state0 ^. unwrapped)
