@@ -12,11 +12,6 @@ docker run -it \
     icfp2019-builder
 docker rm icfp2019-builder-01
 
-# Copy the resulting executables somewhere accessible.
-
-mkdir -p docker/runner/bin
-cp .stack-work-docker/install/*/*/*/bin/* docker/runner/bin
-
 # Build a runner docker image.
 
 docker build -t icfp2019-runner docker/runner

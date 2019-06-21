@@ -10,4 +10,4 @@ ENV HOME="/build"
 ENV STACK_WORK=".stack-work-docker"
 
 WORKDIR /build
-ENTRYPOINT stack build
+ENTRYPOINT bash docker/builder/entrypoint.sh
