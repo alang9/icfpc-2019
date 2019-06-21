@@ -1,0 +1,40 @@
+Cabal-version:       2.2
+Name:                icfp2019
+Version:             0.1.0.0
+Synopsis:            ICFP 2019 Contest
+Description:         ICFP 2019 Contest
+License:             BSD-3-Clause
+License-file:        LICENSE
+Author:              Adam Bratschi-Kaye, Akio Takano, Alex Lang, Jasper Van der Jeugt
+Maintainer:          me@alang.ca
+Copyright:           2019 Adam Bratschi-Kaye, Akio Takano, Alex Lang, Jasper Van der Jeugt
+Homepage:            http://github.com/alang9/icfp-2019
+Bug-reports:         http://github.com/alang9/icfp-2019/issues
+Category:            Data
+Build-type:          Simple
+Extra-source-files:  README.md
+
+Source-repository head
+  Type:     git
+  Location: git://github.com/alang9/icfp-2019.git
+
+Library
+  Hs-source-dirs:   lib
+  Default-language: Haskell2010
+  Ghc-options:      -Wall
+
+  Exposed-modules:
+    ICFP2019.Main.V0
+
+  Build-depends:
+    base
+
+Common exe
+  Default-language: Haskell2010
+  Hs-source-dirs:   src
+  Ghc-options:      -threaded -rtsopts -with-rtsopts=-N -Wall
+  Build-depends:    base, icfp2019
+
+Executable icfp2019-v0
+  Import:  exe
+  Main-is: V0.hs
