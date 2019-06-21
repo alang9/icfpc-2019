@@ -29,10 +29,9 @@ data Booster
   | FastWheels
   | Drill
   | Mysterious
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Ord, Generic)
 
 instance Hashable Booster
-
 
 -- INVARIANT: wrapped and blocked should be mutually exclusive
 data MineState = MineState
@@ -47,8 +46,9 @@ data MineState = MineState
   , _timeSpent :: !Int
   , _corner0 :: !Point
   , _corner1 :: !Point
-  } deriving (Show)
+  } deriving (Show, Eq, Ord, Generic)
 
+instance Hashable MineState
 
 makeLenses ''MineState
 
@@ -137,7 +137,7 @@ step state0 act = case act of
     then
       if HS.member rp (validNewManipulatorPositions state0)
         then
-          Right $ tickTime $ state0
+          Right $ tickTime $ applyWrapped $ state0
             & wwManipulators %~ HS.insert rp
             & collectedBoosters %~ HM.adjust pred Extension
         else Left CantAttachManipulator
@@ -164,14 +164,16 @@ passable pt state0 = inMine && (notWall || hasDrill)
     V2 x0 y0 = state0 ^. corner0
     V2 x1 y1 = state0 ^. corner1
 
-wrappable :: MineState -> Point -> Bool
-wrappable state0 pt = inMine && notWall
+open :: MineState -> Point -> Bool
+open state0 pt@(V2 x y) = inMine && notWall
   where
     inMine = x >= x0 && x < x1 && y >= y0 && y < y1
     notWall = not $ HS.member pt (view blocked state0)
-    V2 x y = pt
     V2 x0 y0 = state0 ^. corner0
     V2 x1 y1 = state0 ^. corner1
+
+notWrapped :: MineState -> Point -> Bool
+notWrapped state0 pt = open state0 pt && not (HS.member pt (state0 ^. wrapped))
 
 movePosition :: RelPos -> MineState -> MineState
 movePosition rp state0 =
@@ -185,7 +187,7 @@ movePosition rp state0 =
     pt = rp + state0 ^. wwPosition
 
 applyWrapped :: MineState -> MineState
-applyWrapped state0 = state0 & wrapped %~ HS.union (HS.filter (wrappable state0) $ HS.map (+ state0 ^. wwPosition) $ state0 ^. wwManipulators) -- TODO: We need to check line of sight here
+applyWrapped state0 = state0 & wrapped %~ HS.union (HS.filter (open state0) $ HS.map (+ state0 ^. wwPosition) $ state0 ^. wwManipulators) -- TODO: We need to check line of sight here
 
 allWrapped :: MineState -> Bool
 allWrapped state0 = if HS.size (HS.intersection (state0 ^. blocked) (state0 ^. wrapped)) > 0
@@ -194,6 +196,9 @@ allWrapped state0 = if HS.size (HS.intersection (state0 ^. blocked) (state0 ^. w
     LT -> False
     EQ -> True
     GT -> error $ "allWrapped: Should be impossible: " ++ show state0
+
+remainingTiles :: MineState -> Int
+remainingTiles state0 = numTiles state0 - HS.size (state0 ^. blocked) - HS.size (state0 ^. wrapped)
 
 numTiles :: MineState -> Int
 numTiles state0 = (y1 - y0) * (x1 - x0)
@@ -222,3 +227,16 @@ tickTime state0 = state0
   & activeFastWheels %~ max 0 . subtract 1
   & activeDrill %~ max 0 . subtract 1
   & timeSpent %~ (+) 1
+
+interestingActions :: MineState -> [Action]
+interestingActions state0 = concat
+  [ if passable (state0 ^. wwPosition + V2 (-1) 0) state0 then [MoveLeft] else []
+  , if passable (state0 ^. wwPosition + V2 1 0) state0 then [MoveRight] else []
+  , if passable (state0 ^. wwPosition + V2 0 (-1)) state0 then [MoveDown] else []
+  , if passable (state0 ^. wwPosition + V2 0 1) state0 then [MoveUp] else []
+  , [TurnCW]
+  , [TurnCCW]
+  , if maybe False (> 0) $ HM.lookup FastWheels (state0 ^. collectedBoosters) then [AttachFastWheels] else []
+  , if maybe False (> 0) $ HM.lookup Drill (state0 ^. collectedBoosters) then [AttachDrill] else []
+  , if maybe False (> 0) $ HM.lookup Extension (state0 ^. collectedBoosters) then [AttachManipulator pt | pt <- HS.toList (validNewManipulatorPositions state0), notWrapped state0 pt ] else []
+  ]

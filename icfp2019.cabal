@@ -25,11 +25,15 @@ Library
 
   Exposed-modules:
     ICFP2019.Main.V0,
-    ICFP2019.Main.Sim
+    ICFP2019.Main.Sim,
+    ICFP2019.Main.Dfs
+    ICFP2019.Main.Greedy
 
   other-modules:
     ICFP2019.State,
     ICFP2019.Action
+    ICFP2019.DFS
+    ICFP2019.AStar
 
   Build-depends:
     base,
@@ -38,7 +42,9 @@ Library
     attoparsec,
     bytestring,
     hashable,
-    lens
+    lens,
+    containers,
+    astar
 
 Common exe
   Default-language: Haskell2010
@@ -53,3 +59,11 @@ Executable icfp2019-v0
 Executable sim
   Import:  exe
   Main-is: Sim.hs
+
+Executable dfs
+  Import:  exe
+  Main-is: Dfs.hs
+
+Executable greedy
+  Import:  exe
+  Main-is: Greedy.hs
