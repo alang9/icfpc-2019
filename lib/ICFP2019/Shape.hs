@@ -2,7 +2,7 @@
 {-# LANGUAGE LambdaCase      #-}
 {-# LANGUAGE TemplateHaskell #-}
 module ICFP2019.Shape
-    ( Shape, width, height
+    ( Shape, width, height, points
     , fromTuples
     , fromPoints
 

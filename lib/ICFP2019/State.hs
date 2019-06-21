@@ -12,6 +12,7 @@ import qualified Data.HashMap.Lazy as HM
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashSet as HS
 import Data.HashSet (HashSet)
+import qualified Data.Vector.Unboxed as VU
 import GHC.Generics (Generic)
 import Linear
 
@@ -34,11 +35,12 @@ data Booster
 
 instance Hashable Booster
 
--- INVARIANT: wrapped and blocked should be mutually exclusive
+-- INVARIANT: wrapped and blocked and unwrapped should be mutually exclusive, and their union should be `Shape.toHashSet boundary`
 data MineState = MineState
   { _wwPosition :: !Point
   , _wwManipulators :: !(HashSet RelPos)
   , _wrapped :: !(HashSet Point)
+  , _unwrapped :: !(HashSet Point)
   , _blocked :: !(HashSet Point)
   , _boosters :: !(HashMap Point Booster)
   , _collectedBoosters :: !(HashMap Booster Int)
@@ -66,11 +68,14 @@ initialParser = do
     walls <- AP.sepBy shapeParser (AP.char ';')
     _ <- AP.char '#'
     boos <- AP.sepBy boosterParser (AP.char ';')
+    let blok = foldMap Shape.toHashSet walls
+    let wrap = mempty
     return $ applyWrapped $ MineState
       { _wwPosition = wwPos
       , _wwManipulators = startingManip
-      , _wrapped = mempty
-      , _blocked = foldMap Shape.toHashSet walls
+      , _wrapped = wrap
+      , _unwrapped = HS.difference (HS.difference (allTiles boundary0) wrap) blok
+      , _blocked = blok
       , _boundary = boundary0
       , _boosters = HM.fromList boos
       , _collectedBoosters = mempty
@@ -79,6 +84,8 @@ initialParser = do
       , _timeSpent = 0
       }
   where
+    allTiles sha = Shape.toHashSet sha
+
     startingManip = HS.fromList [V2 0 0, V2 1 0, V2 1 1, V2 1 (-1)]
     boosterParser = do
       whichBooster <- AP.char 'B' *> pure Extension
@@ -165,7 +172,11 @@ movePosition rp state0 =
     pt = rp + state0 ^. wwPosition
 
 applyWrapped :: MineState -> MineState
-applyWrapped state0 = state0 & wrapped %~ HS.union (HS.filter (open state0) $ HS.map (+ state0 ^. wwPosition) $ state0 ^. wwManipulators) -- TODO: We need to check line of sight here
+applyWrapped state0 = state0
+  & wrapped %~ HS.union diff
+  & unwrapped %~ (\uw -> HS.difference uw diff)
+  where
+    diff = HS.filter (open state0) $ HS.map (+ state0 ^. wwPosition) $ state0 ^. wwManipulators -- TODO: We need to check line of sight here
 
 allWrapped :: MineState -> Bool
 allWrapped state0 = if HS.size (HS.intersection (state0 ^. blocked) (state0 ^. wrapped)) > 0
@@ -179,13 +190,10 @@ remainingTiles :: MineState -> Int
 remainingTiles state0 = numTiles state0 - HS.size (state0 ^. blocked) - HS.size (state0 ^. wrapped)
 
 numTiles :: MineState -> Int
-numTiles = HS.size . allTiles
-
-allTiles :: MineState -> HashSet Point
-allTiles state0 = Shape.toHashSet (state0 ^. boundary)
+numTiles = VU.length . VU.filter id . view (boundary . Shape.points)
 
 missingTiles :: MineState -> HashSet Point
-missingTiles state0 = HS.difference (HS.difference (allTiles state0) (state0 ^. wrapped)) (state0 ^. blocked)
+missingTiles = view unwrapped
 
 getBooster :: Point -> MineState -> MineState
 getBooster pt state0 = case HM.lookup pt $ state0 ^. boosters of
