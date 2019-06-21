@@ -34,7 +34,9 @@ Library
     unordered-containers,
     linear,
     attoparsec,
-    bytestring
+    bytestring,
+    hashable,
+    lens
 
 Common exe
   Default-language: Haskell2010

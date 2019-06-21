@@ -1,5 +1,7 @@
 module ICFP2019.Action where
 
+import Linear
+
 data Action
   = MoveUp
   | MoveDown
@@ -8,7 +10,7 @@ data Action
   | DoNothing
   | TurnCW
   | TurnCCW
-  | Attach (V2 Int)
-  | FastWheels
-  | Drill
+  | AttachManipulator (V2 Int)
+  | AttachFastWheels
+  | AttachDrill
 
