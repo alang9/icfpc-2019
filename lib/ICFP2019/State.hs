@@ -35,6 +35,12 @@ data Booster
 
 instance Hashable Booster
 
+data MineProblem = MineProblem
+  { _boundary :: !Shape
+  } deriving (Show)
+
+makeLenses ''MineProblem
+
 -- INVARIANT: wrapped and blocked and unwrapped should be mutually exclusive, and their union should be `Shape.toHashSet boundary`
 data MineState = MineState
   { _wwPosition :: !Point
@@ -47,7 +53,6 @@ data MineState = MineState
   , _activeFastWheels :: !TimeRemaining
   , _activeDrill :: !TimeRemaining
   , _timeSpent :: !Int
-  , _boundary :: !Shape
   } deriving (Show, Eq, Ord, Generic)
 
 instance Hashable MineState
@@ -59,7 +64,7 @@ data ActionException
   | CantAttachManipulator
   deriving (Show)
 
-initialParser :: AP.Parser MineState
+initialParser :: AP.Parser (MineProblem, MineState)
 initialParser = do
     boundary0 <- shapeParser
     _ <- AP.char '#'
@@ -70,19 +75,20 @@ initialParser = do
     boos <- AP.sepBy boosterParser (AP.char ';')
     let blok = foldMap Shape.toHashSet walls
     let wrap = mempty
-    return $ applyWrapped $ MineState
-      { _wwPosition = wwPos
-      , _wwManipulators = startingManip
-      , _wrapped = wrap
-      , _unwrapped = HS.difference (HS.difference (allTiles boundary0) wrap) blok
-      , _blocked = blok
-      , _boundary = boundary0
-      , _boosters = HM.fromList boos
-      , _collectedBoosters = mempty
-      , _activeFastWheels = 0
-      , _activeDrill = 0
-      , _timeSpent = 0
-      }
+    let mineProb = MineProblem boundary0
+    let initialSt = applyWrapped mineProb $ MineState
+          { _wwPosition = wwPos
+          , _wwManipulators = startingManip
+          , _wrapped = wrap
+          , _unwrapped = HS.difference (HS.difference (allTiles boundary0) wrap) blok
+          , _blocked = blok
+          , _boosters = HM.fromList boos
+          , _collectedBoosters = mempty
+          , _activeFastWheels = 0
+          , _activeDrill = 0
+          , _timeSpent = 0
+          }
+    return (mineProb, initialSt)
   where
     allTiles sha = Shape.toHashSet sha
 
@@ -110,15 +116,15 @@ validNewManipulatorPositions state0 = HS.unions [HS.map ((+) dir) $ state0 ^. ww
   where
     dirs = [V2 0 1, V2 0 (-1), V2 1 0, V2 (-1) 0]
 
-step :: MineState -> Action -> Either ActionException MineState
-step state0 act = case act of
+step :: MineProblem -> MineState -> Action -> Either ActionException MineState
+step prob state0 act = case act of
   DoNothing -> pure $ tickTime state0
   MoveUp -> pure $ doMove (V2 0 1)
   MoveDown -> pure $ doMove (V2 0 (-1))
   MoveLeft -> pure $ doMove (V2 (-1) 0)
   MoveRight -> pure $ doMove (V2 1 0)
-  TurnCW -> pure $ tickTime $ movePosition (V2 0 0) $ state0 & wwManipulators %~ HS.map (\(V2 x y) -> V2 y (-x))
-  TurnCCW -> pure $ tickTime $ movePosition (V2 0 0) $ state0 & wwManipulators %~ HS.map (\(V2 x y) -> V2 (-y) x)
+  TurnCW -> pure $ tickTime $ movePosition (V2 0 0) prob $ state0 & wwManipulators %~ HS.map (\(V2 x y) -> V2 y (-x))
+  TurnCCW -> pure $ tickTime $ movePosition (V2 0 0) prob $ state0 & wwManipulators %~ HS.map (\(V2 x y) -> V2 (-y) x)
   AttachFastWheels -> if HM.lookupDefault 0 FastWheels (state0 ^. collectedBoosters) > 0
     then Right $ tickTime $ state0
       & activeFastWheels %~ max 50
@@ -133,7 +139,7 @@ step state0 act = case act of
     then
       if HS.member rp (validNewManipulatorPositions state0)
         then
-          Right $ tickTime $ applyWrapped $ state0
+          Right $ tickTime $ applyWrapped prob $ state0
             & wwManipulators %~ HS.insert rp
             & collectedBoosters %~ HM.adjust pred Extension
         else Left CantAttachManipulator
@@ -141,55 +147,52 @@ step state0 act = case act of
   where
     doMove rp =
       if state0 ^. activeFastWheels > 0
-        then tickTime $ movePosition rp $ movePosition rp state0
-        else tickTime $ movePosition rp state0
+        then tickTime $ movePosition rp prob $ movePosition rp prob state0
+        else tickTime $ movePosition rp prob state0
 
-passable :: Point -> MineState -> Bool
-passable pt state0 = inMine && (notWall || hasDrill)
+passable :: MineProblem -> Point -> MineState -> Bool
+passable prob pt state0 = inMine && (notWall || hasDrill)
   where
     hasDrill = state0 ^. activeDrill > 0
-    inMine = pt `Shape.member` (state0 ^. boundary)
+    inMine = pt `Shape.member` (prob ^. boundary)
     notWall = not $ HS.member pt (view blocked state0)
 
-open :: MineState -> Point -> Bool
-open state0 pt = inMine && notWall
+open :: MineProblem -> MineState -> Point -> Bool
+open prob state0 pt = inMine && notWall
   where
-    inMine = pt `Shape.member` (state0 ^. boundary)
+    inMine = pt `Shape.member` (prob ^. boundary)
     notWall = not $ HS.member pt (view blocked state0)
 
 notWrapped :: MineState -> Point -> Bool
-notWrapped state0 pt = open state0 pt && not (HS.member pt (state0 ^. wrapped))
+notWrapped state0 pt = HS.member pt (state0 ^. unwrapped)-- open prob state0 pt && not (HS.member pt (state0 ^. wrapped))
 
-movePosition :: RelPos -> MineState -> MineState
-movePosition rp state0 =
-  if passable pt state0
+movePosition :: RelPos -> MineProblem -> MineState -> MineState
+movePosition rp prob state0 =
+  if passable prob pt state0
     then getBooster pt $
-      applyWrapped $ state0
+      applyWrapped prob $ state0
             & wwPosition .~ pt
             & blocked %~ HS.delete pt
     else state0
   where
     pt = rp + state0 ^. wwPosition
 
-applyWrapped :: MineState -> MineState
-applyWrapped state0 = state0
+applyWrapped :: MineProblem -> MineState -> MineState
+applyWrapped prob state0 = state0
   & wrapped %~ HS.union diff
   & unwrapped %~ (\uw -> HS.difference uw diff)
   where
-    diff = HS.filter (open state0) $ HS.map (+ state0 ^. wwPosition) $ state0 ^. wwManipulators -- TODO: We need to check line of sight here
+    diff = HS.filter (open prob state0) $ HS.map (+ state0 ^. wwPosition) $ state0 ^. wwManipulators -- TODO: We need to check line of sight here
 
 allWrapped :: MineState -> Bool
 allWrapped state0 = if HS.size (HS.intersection (state0 ^. blocked) (state0 ^. wrapped)) > 0
   then error "allWrapped: invariant broken"
-  else case compare (HS.size (state0 ^. blocked) + HS.size (state0 ^. wrapped)) (numTiles state0) of
-    LT -> False
-    EQ -> True
-    GT -> error $ "allWrapped: Should be impossible: " ++ show state0
+  else HS.null (state0 ^. unwrapped)
 
 remainingTiles :: MineState -> Int
-remainingTiles state0 = numTiles state0 - HS.size (state0 ^. blocked) - HS.size (state0 ^. wrapped)
+remainingTiles state0 = HS.size (state0 ^. unwrapped)
 
-numTiles :: MineState -> Int
+numTiles :: MineProblem -> Int
 numTiles = VU.length . VU.filter id . view (boundary . Shape.points)
 
 missingTiles :: MineState -> HashSet Point
@@ -208,12 +211,12 @@ tickTime state0 = state0
   & activeDrill %~ max 0 . subtract 1
   & timeSpent %~ (+) 1
 
-interestingActions :: MineState -> [Action]
-interestingActions state0 = concat
-  [ if passable (state0 ^. wwPosition + V2 (-1) 0) state0 then [MoveLeft] else []
-  , if passable (state0 ^. wwPosition + V2 1 0) state0 then [MoveRight] else []
-  , if passable (state0 ^. wwPosition + V2 0 (-1)) state0 then [MoveDown] else []
-  , if passable (state0 ^. wwPosition + V2 0 1) state0 then [MoveUp] else []
+interestingActions :: MineProblem -> MineState -> [Action]
+interestingActions prob state0 = concat
+  [ if passable prob (state0 ^. wwPosition + V2 (-1) 0) state0 then [MoveLeft] else []
+  , if passable prob (state0 ^. wwPosition + V2 1 0) state0 then [MoveRight] else []
+  , if passable prob (state0 ^. wwPosition + V2 0 (-1)) state0 then [MoveDown] else []
+  , if passable prob (state0 ^. wwPosition + V2 0 1) state0 then [MoveUp] else []
   , [TurnCW]
   , [TurnCCW]
   , if maybe False (> 0) $ HM.lookup FastWheels (state0 ^. collectedBoosters) then [AttachFastWheels] else []

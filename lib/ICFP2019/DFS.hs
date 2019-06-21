@@ -16,15 +16,15 @@ import Linear
 import ICFP2019.Action
 import ICFP2019.State
 
-dfsOneStep :: MineState -> [(Action, MineState)]
-dfsOneStep state0 = mapMaybe go $ interestingActions state0
+dfsOneStep :: MineProblem -> MineState -> [(Action, MineState)]
+dfsOneStep prob state0 = mapMaybe go $ interestingActions prob state0
   where
-    go act = case step state0 act of
+    go act = case step prob state0 act of
       Left ex -> error $ "dfsOneStep: " ++ show ex
       Right state1 -> Just (act, state1)
 
-boundedDfs :: forall m a. (Monad m, Ord a) => (MineState -> m a) -> Int -> MineState -> m (Seq Action, MineState)
-boundedDfs fitness maxDepth initial = do
+boundedDfs :: forall m a. (Monad m, Ord a) => MineProblem -> (MineState -> m a) -> Int -> MineState -> m (Seq Action, MineState)
+boundedDfs prob fitness maxDepth initial = do
   (acts, st, _) <- go maxDepth initial
   return (acts, st)
   where
@@ -36,7 +36,7 @@ boundedDfs fitness maxDepth initial = do
     | remDepth <= 0 = do
         !fit <- fitness st
         return (mempty, st, fit)
-    | otherwise = case dfsOneStep st of
+    | otherwise = case dfsOneStep prob st of
         [] -> do
           !fit <- fitness st
           return (mempty, st, fit)

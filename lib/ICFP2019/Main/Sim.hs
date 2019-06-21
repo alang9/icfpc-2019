@@ -13,12 +13,12 @@ main :: IO ()
 main = do
   [desc,sols] <- getArgs
   descBs <- C8.readFile desc
-  let Right state0 = AP.parseOnly initialParser descBs
+  let Right (prob, state0) = AP.parseOnly initialParser descBs
   actionBs <- C8.readFile sols
-  go 0 state0 actionBs
+  go prob 0 state0 actionBs
   where
-    go :: Int -> MineState -> C8.ByteString -> IO ()
-    go n state0 actionBs = do
+    go :: MineProblem -> Int -> MineState -> C8.ByteString -> IO ()
+    go prob n state0 actionBs = do
       if allWrapped state0
         then do
           putStrLn $ "Completed after " ++ show n ++ " steps"
@@ -28,6 +28,6 @@ main = do
           case AP.parse parseAction actionBs of
             f@(AP.Fail _ _ _) -> error $ show (f, n, state0, actionBs, missingTiles state0)
             AP.Partial _ -> error "unexpected partial"
-            AP.Done remain act -> case step state0 act of
+            AP.Done remain act -> case step prob state0 act of
               Left exc -> error $ "sim exception: " ++ show exc
-              Right state1 -> go (n + 1) state1 remain
+              Right state1 -> go prob (n + 1) state1 remain

@@ -14,16 +14,16 @@ main :: IO ()
 main = do
   [desc] <- getArgs
   descBs <- C8.readFile desc
-  let Right state0 = AP.parseOnly initialParser descBs
+  let Right (prob, state0) = AP.parseOnly initialParser descBs
   hSetBuffering stdout NoBuffering
-  go state0
+  go prob state0
   putStrLn ""
   where
-    go st = case HS.toList (missingTiles st) of
+    go prob st = case HS.toList (missingTiles st) of
       [] -> return ()
-      (pt:_) -> case aStar st pt of
+      (pt:_) -> case aStar prob st pt of
         ([], _) -> error "bad greedy"
         (acts, st') -> do
           putStr $ concat $ serialize <$> acts
-          go st'
+          go prob st'
 --   go state0 undefin

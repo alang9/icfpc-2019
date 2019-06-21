@@ -17,7 +17,6 @@ import           Control.Lens
 import           Control.Lens.TH             (makeLenses)
 import           Control.Monad               (foldM_, forM_)
 import           Control.Monad.ST            (runST)
-import           Data.Hashable               (Hashable)
 import qualified Data.HashSet                as HS
 import           Data.Maybe                  (fromMaybe)
 import           Data.Vector.Instances       ()
@@ -35,8 +34,6 @@ data Shape = Shape
     } deriving (Show, Eq, Ord, Generic)
 
 $(makeLenses ''Shape)
-
-instance Hashable Shape
 
 fromTuples :: [(Int, Int)] -> Shape
 fromTuples = fromPoints . map (uncurry V2)
