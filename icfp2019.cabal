@@ -26,8 +26,15 @@ Library
   Exposed-modules:
     ICFP2019.Main.V0
 
+  other-modules:
+    ICFP2019.State
+
   Build-depends:
-    base
+    base,
+    unordered-containers,
+    linear,
+    attoparsec,
+    bytestring
 
 Common exe
   Default-language: Haskell2010
