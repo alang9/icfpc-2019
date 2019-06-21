@@ -1,4 +1,4 @@
-module Types where
+module ICFP2019.Action where
 
 data Action
   = MoveUp
