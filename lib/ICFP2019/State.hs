@@ -137,14 +137,6 @@ step state0 act = case act of
         then tickTime $ movePosition rp $ movePosition rp state0
         else tickTime $ movePosition rp state0
 
-{-
-bound :: MineState -> Point -> Point
-bound state0 (V2 x y) = V2 (max x0 $ min x1 x) (max y0 $ min y1 y)
-  where
-    V2 x0 y0 = state0 ^. corner0
-    V2 x1 y1 = state0 ^. corner1
--}
-
 passable :: Point -> MineState -> Bool
 passable pt state0 = inMine && (notWall || hasDrill)
   where
@@ -187,11 +179,10 @@ remainingTiles :: MineState -> Int
 remainingTiles state0 = numTiles state0 - HS.size (state0 ^. blocked) - HS.size (state0 ^. wrapped)
 
 numTiles :: MineState -> Int
-numTiles state0 =
-    let b = state0 ^. boundary in b ^. Shape.width * b ^. Shape.height
+numTiles = HS.size . allTiles
 
 allTiles :: MineState -> HashSet Point
-allTiles state0 = HS.fromList $ Shape.pointsInBoundingBox (state0 ^. boundary)
+allTiles state0 = Shape.toHashSet (state0 ^. boundary)
 
 missingTiles :: MineState -> HashSet Point
 missingTiles state0 = HS.difference (HS.difference (allTiles state0) (state0 ^. wrapped)) (state0 ^. blocked)
