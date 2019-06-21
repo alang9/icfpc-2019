@@ -6,7 +6,6 @@ module ICFP2019.State where
 
 import Control.Applicative
 import Control.Lens
-import Control.Monad
 import qualified Data.Attoparsec.ByteString.Char8 as AP
 import Data.Hashable
 import qualified Data.HashMap.Lazy as HM
@@ -16,6 +15,8 @@ import Data.HashSet (HashSet)
 import GHC.Generics (Generic)
 import Linear
 
+import qualified ICFP2019.Shape as Shape
+import ICFP2019.Shape (Shape)
 import ICFP2019.Action
 
 type Point = V2 Int
@@ -44,8 +45,7 @@ data MineState = MineState
   , _activeFastWheels :: !TimeRemaining
   , _activeDrill :: !TimeRemaining
   , _timeSpent :: !Int
-  , _corner0 :: !Point
-  , _corner1 :: !Point
+  , _boundary :: !Shape
   } deriving (Show, Eq, Ord, Generic)
 
 instance Hashable MineState
@@ -59,20 +59,19 @@ data ActionException
 
 initialParser :: AP.Parser MineState
 initialParser = do
-    (c0, c1) <- quadParser
+    boundary0 <- shapeParser
     _ <- AP.char '#'
     wwPos <- pairParser
     _ <- AP.char '#'
-    walls <- AP.sepBy quadParser (AP.char ';')
+    walls <- AP.sepBy shapeParser (AP.char ';')
     _ <- AP.char '#'
     boos <- AP.sepBy boosterParser (AP.char ';')
     return $ applyWrapped $ MineState
       { _wwPosition = wwPos
       , _wwManipulators = startingManip
       , _wrapped = mempty
-      , _blocked = HS.fromList [ V2 x y | (V2 mX0 mY0, V2 mX1 mY1) <- walls, x <- [mX0..mX1-1], y <- [mY0..mY1-1] ]
-      , _corner0 = c0
-      , _corner1 = c1
+      , _blocked = foldMap Shape.toHashSet walls
+      , _boundary = boundary0
       , _boosters = HM.fromList boos
       , _collectedBoosters = mempty
       , _activeFastWheels = 0
@@ -88,19 +87,9 @@ initialParser = do
         <|> AP.char 'X' *> pure Mysterious
       pt <- pairParser
       return (pt, whichBooster)
-    quadParser = do
-      V2 mx my <- pairParser
-      _ <- AP.char ','
-      V2 dX my' <- pairParser
-      _ <- AP.char ','
-      V2 dX' dY' <- pairParser
-      _ <- AP.char ','
-      V2 mx' dY <- pairParser
-      guard $ my == my'
-      guard $ mx == mx'
-      guard $ dX == dX'
-      guard $ dY == dY'
-      return (V2 mx my, V2 dX dY)
+    shapeParser = do
+      points <- AP.sepBy pairParser (AP.char ',')
+      return $! Shape.fromPoints points
     pairParser = do
       _ <- AP.char '('
       x <- AP.signed AP.decimal
@@ -148,29 +137,26 @@ step state0 act = case act of
         then tickTime $ movePosition rp $ movePosition rp state0
         else tickTime $ movePosition rp state0
 
+{-
 bound :: MineState -> Point -> Point
 bound state0 (V2 x y) = V2 (max x0 $ min x1 x) (max y0 $ min y1 y)
   where
     V2 x0 y0 = state0 ^. corner0
     V2 x1 y1 = state0 ^. corner1
+-}
 
 passable :: Point -> MineState -> Bool
 passable pt state0 = inMine && (notWall || hasDrill)
   where
     hasDrill = state0 ^. activeDrill > 0
-    inMine = x >= x0 && x < x1 && y >= y0 && y < y1
+    inMine = pt `Shape.member` (state0 ^. boundary)
     notWall = not $ HS.member pt (view blocked state0)
-    V2 x y = pt
-    V2 x0 y0 = state0 ^. corner0
-    V2 x1 y1 = state0 ^. corner1
 
 open :: MineState -> Point -> Bool
-open state0 pt@(V2 x y) = inMine && notWall
+open state0 pt = inMine && notWall
   where
-    inMine = x >= x0 && x < x1 && y >= y0 && y < y1
+    inMine = pt `Shape.member` (state0 ^. boundary)
     notWall = not $ HS.member pt (view blocked state0)
-    V2 x0 y0 = state0 ^. corner0
-    V2 x1 y1 = state0 ^. corner1
 
 notWrapped :: MineState -> Point -> Bool
 notWrapped state0 pt = open state0 pt && not (HS.member pt (state0 ^. wrapped))
@@ -201,16 +187,11 @@ remainingTiles :: MineState -> Int
 remainingTiles state0 = numTiles state0 - HS.size (state0 ^. blocked) - HS.size (state0 ^. wrapped)
 
 numTiles :: MineState -> Int
-numTiles state0 = (y1 - y0) * (x1 - x0)
-  where
-    V2 x0 y0 = state0 ^. corner0
-    V2 x1 y1 = state0 ^. corner1
+numTiles state0 =
+    let b = state0 ^. boundary in b ^. Shape.width * b ^. Shape.height
 
 allTiles :: MineState -> HashSet Point
-allTiles state0 = HS.fromList [V2 x y | x <- [x0..x1-1], y<- [y0..y1-1]]
-  where
-    V2 x0 y0 = state0 ^. corner0
-    V2 x1 y1 = state0 ^. corner1
+allTiles state0 = HS.fromList $ Shape.pointsInBoundingBox (state0 ^. boundary)
 
 missingTiles :: MineState -> HashSet Point
 missingTiles state0 = HS.difference (HS.difference (allTiles state0) (state0 ^. wrapped)) (state0 ^. blocked)

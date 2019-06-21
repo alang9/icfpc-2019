@@ -24,16 +24,15 @@ Library
   Ghc-options:      -Wall
 
   Exposed-modules:
-    ICFP2019.Main.V0,
-    ICFP2019.Main.Sim,
-    ICFP2019.Main.Dfs
-    ICFP2019.Main.Greedy
-
-  other-modules:
-    ICFP2019.State,
+    ICFP2019.AStar
     ICFP2019.Action
     ICFP2019.DFS
-    ICFP2019.AStar
+    ICFP2019.Main.Dfs
+    ICFP2019.Main.Greedy
+    ICFP2019.Main.Sim
+    ICFP2019.Main.V0
+    ICFP2019.Shape
+    ICFP2019.State
 
   Build-depends:
     base,
@@ -44,7 +43,9 @@ Library
     hashable,
     lens,
     containers,
-    astar
+    astar,
+    vector,
+    vector-instances
 
 Common exe
   Default-language: Haskell2010
