@@ -33,6 +33,7 @@ Library
     ICFP2019.Main.V0
     ICFP2019.Shape
     ICFP2019.State
+    MHeap
 
   Build-depends:
     base,
@@ -45,7 +46,8 @@ Library
     containers,
     astar,
     vector,
-    vector-instances
+    vector-instances,
+    primitive
 
 Common exe
   Default-language: Haskell2010
