@@ -55,6 +55,7 @@ data OneWorkerState = OneWorkerState
   , _blocked :: !(HashSet Point)
   , _boosters :: !(HashMap Point Booster)
   , _collectedBoosters :: !(HashMap Booster Int)
+  , _totalBoosters :: !Int
   , _activeFastWheels :: !TimeRemaining
   , _activeDrill :: !TimeRemaining
   , _timeSpent :: !Int
@@ -83,6 +84,7 @@ data FullState = FullState
   , _fCollectedBoosters :: !(HashMap Booster Int)
   , _fTimeSpent :: !Int
   , _fBeaconLocations :: !(HashSet Point)
+  , _fTotalBoosters :: !Int
   } deriving (Show, Eq, Ord, Generic)
 
 makeLenses ''FullState
@@ -108,7 +110,8 @@ makeOneWorker worker full =
     , _activeFastWheels = worker ^. wActiveFastWheels
     , _activeDrill = worker ^. wActiveDrill 
     , _timeSpent = full ^. fTimeSpent 
-    , _beaconLocations = full ^. fBeaconLocations 
+    , _beaconLocations = full ^. fBeaconLocations
+    , _totalBoosters = full ^. fTotalBoosters
     }
 
 selectWorker :: FullState -> Int -> Maybe OneWorkerState
@@ -127,6 +130,7 @@ updateFullState workerIndex oneworkerstate fullstate =
   & fTimeSpent .~ oneworkerstate ^. timeSpent
   & fBeaconLocations .~ oneworkerstate ^. beaconLocations
   & fWorkers %~ HM.insert workerIndex worker
+  & fTotalBoosters .~ oneworkerstate ^. totalBoosters
   where 
     worker = WorkerState
       { _wPosition = oneworkerstate ^. wwPosition 
@@ -172,6 +176,7 @@ initialParser = do
           , _fCollectedBoosters = mempty
           , _fTimeSpent = 0
           , _fBeaconLocations = mempty
+          , _fTotalBoosters = 0
           }
     let initialSt = maybe (error "should be unreachable") id (updateFullStateWith applyWrapped fullSt 0) 
     -- traceShowM $ initialSt
@@ -318,6 +323,7 @@ getBooster pt state0 = case HM.lookup pt $ state0 ^. boosters of
   Just b -> state0
     & boosters %~ HM.delete pt
     & collectedBoosters %~ HM.insertWith (+) b 1
+    & totalBoosters %~ (+) 1
 
 tickTimeAll :: FullState -> FullState
 tickTimeAll state0 = state0

@@ -31,7 +31,7 @@ import Debug.Trace
 --     go gen prob st
 --       | allWrapped st = putStrLn ""
 --       | otherwise = do
---           foo <- randomBoundedDfs gen prob (\st' -> do (acts, st'') <- boundedBfs gen 50 prob st'; return (remainingTiles st'', length acts, negate (HS.size (st' ^. beaconLocations)), negate $ sum (st' ^. collectedBoosters), remainingTiles st')) 1 st
+--           foo <- randomBoundedDfs gen prob (\st' -> do (acts, st'') <- boundedBfs gen 50 prob st'; return (remainingTiles st'', length acts, negate (HS.size (st' ^. beaconLocations)), negate $ st' ^. totalBoosters, remainingTiles st')) 1 st
 --           case foo of
 --             (xs@(x Seq.:<| _), st', finSco)
 --               | x /= DoNothing && view _2 finSco < remainingTiles st -> do
@@ -43,6 +43,6 @@ import Debug.Trace
 --                   acts -> do
 --                     let st' = foldl' (fmap (either (error "oops9") id) . step prob) st acts
 --                     forM_ acts $ \act -> putStr $ serialize act
---                     traceShowM ("greedy", length acts)
+--                     traceShowM ("greedy", length acts, x, view _2 finSco, remainingTiles st)
 --                     go gen prob st'
 -- --   go state0 undefin
