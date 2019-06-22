@@ -14,25 +14,25 @@ import Debug.Trace
 
 main :: IO ()
 main = do
-  [desc,sols] <- getArgs
+  [desc, sols] <- getArgs
   descBs <- C8.readFile desc
   let Right (prob, state0) = AP.parseOnly initialParser descBs
   actionBs <- C8.readFile sols
-  parsedActions <- case AP.parse parseAllActions actionBs of
-    f@(AP.Fail _ _ _) -> error "parsing failed" 
+  let actions = case AP.parse parseAllActions actionBs of
+    AP.Fail _ _ _ -> error "parsing failed" 
     AP.Partial _ -> error "unexpected partial"
     AP.Done remain actions -> actions 
   go prob 0 state0 parsedActions
   where
     go :: MineProblem -> Int -> FullState -> C8.ByteString -> IO ()
-    go prob n state0 parsedActions = do
+    go prob n state0 actions = do
       if allWrapped state0
         then do
           putStrLn $ "Completed after " ++ show n ++ " steps"
-          putStrLn $ "Remaining actions: " ++ show parsedActions
+          putStrLn $ "Remaining actions: " ++ show actions
           putStrLn $ "Misssing tiles: " ++ show (missingTiles state0)
         else
-          case stepAllWorkers prob state0 act of
+          case stepAllWorkers prob state0 actions of
               Left exc -> error $ "sim exception: " ++ show exc
               Right (state1, act1) -> do
                 go prob (n + 1) state1 act1
