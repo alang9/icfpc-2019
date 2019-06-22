@@ -45,6 +45,7 @@ makeLenses ''MineProblem
 -- INVARIANT: wrapped and blocked and unwrapped should be mutually exclusive, and their union should be `Shape.toHashSet boundary`
 data MineState = MineState
   { _wwPosition :: !Point
+  , _wwOrientation :: !Int
   , _wwManipulators :: !(HashSet RelPos)
   , _unwrapped :: !(HashSet Point)
   , _blocked :: !(HashSet Point)
@@ -76,8 +77,9 @@ initialParser = do
     let blok = foldMap Shape.toHashSet walls
     let wrap = mempty
     let mineProb = MineProblem boundary0
-    let initialSt = applyWrapped mineProb $ MineState
+    let initialSt = applyWrapped $ MineState
           { _wwPosition = wwPos
+          , _wwOrientation = 0
           , _wwManipulators = startingManip
           , _unwrapped = HS.difference (HS.difference (allTiles boundary0) wrap) blok
           , _blocked = blok
@@ -122,8 +124,13 @@ step prob state0 act = case act of
   MoveDown -> pure $ doMove (V2 0 (-1))
   MoveLeft -> pure $ doMove (V2 (-1) 0)
   MoveRight -> pure $ doMove (V2 1 0)
-  TurnCW -> pure $ tickTime $ movePosition (V2 0 0) prob $ state0 & wwManipulators %~ HS.map (\(V2 x y) -> V2 y (-x))
-  TurnCCW -> pure $ tickTime $ movePosition (V2 0 0) prob $ state0 & wwManipulators %~ HS.map (\(V2 x y) -> V2 (-y) x)
+  TurnCW -> pure $ tickTime $ movePosition (V2 0 0) prob $ state0
+    & wwManipulators %~ HS.map (\(V2 x y) -> V2 y (-x))
+    & wwOrientation %~ mod 4 . succ
+  TurnCCW ->
+    pure $ tickTime $ movePosition (V2 0 0) prob $ state0
+    & wwManipulators %~ HS.map (\(V2 x y) -> V2 (-y) x)
+    & wwOrientation %~ mod 4 . pred
   AttachFastWheels -> if HM.lookupDefault 0 FastWheels (state0 ^. collectedBoosters) > 0
     then Right $ tickTime $ state0
       & activeFastWheels %~ max 50
@@ -138,7 +145,7 @@ step prob state0 act = case act of
     then
       if HS.member rp (validNewManipulatorPositions state0)
         then
-          Right $ tickTime $ applyWrapped prob $ state0
+          Right $ tickTime $ applyWrapped $ state0
             & wwManipulators %~ HS.insert rp
             & collectedBoosters %~ HM.adjust pred Extension
         else Left CantAttachManipulator
@@ -169,18 +176,19 @@ movePosition :: RelPos -> MineProblem -> MineState -> MineState
 movePosition rp prob state0 =
   if passable prob pt state0
     then getBooster pt $
-      applyWrapped prob $ state0
+      applyWrapped $ state0
             & wwPosition .~ pt
             & blocked %~ HS.delete pt
+            & unwrapped %~ HS.insert pt
     else state0
   where
     pt = rp + state0 ^. wwPosition
 
-applyWrapped :: MineProblem -> MineState -> MineState
-applyWrapped prob state0 = state0
+applyWrapped :: MineState -> MineState
+applyWrapped state0 = state0
   & unwrapped %~ (kill diff)
   where
-    diff = HS.filter (open prob state0) $ HS.map (+ state0 ^. wwPosition) $ state0 ^. wwManipulators -- TODO: We need to check line of sight here
+    diff = HS.filter (notWrapped state0) $ HS.map (+ state0 ^. wwPosition) $ state0 ^. wwManipulators -- TODO: We need to check line of sight here
     kill victims uw = foldl' (flip HS.delete) uw victims
 
 allWrapped :: MineState -> Bool

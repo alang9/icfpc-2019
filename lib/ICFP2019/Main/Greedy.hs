@@ -2,7 +2,7 @@ module ICFP2019.Main.Greedy where
 
 import qualified Data.Attoparsec.ByteString as AP
 import qualified Data.ByteString.Char8 as C8
-import qualified Data.HashSet as HS
+import Data.List
 import System.Environment
 import System.IO
 
@@ -19,11 +19,12 @@ main = do
   go prob state0
   putStrLn ""
   where
-    go prob st = case HS.toList (missingTiles st) of
-      [] -> return ()
-      (pt:_) -> case aStar prob st pt of
-        ([], _) -> error "bad greedy"
-        (acts, st') -> do
-          putStr $ concat $ serialize <$> acts
-          go prob st'
+    go prob st
+      | allWrapped st = return ()
+      | otherwise = case bfs prob st of
+          [] -> error "bad greedy"
+          acts -> do
+            putStr $ concat $ serialize <$> acts
+            let st' = foldl' (fmap (either (error "oops") id) . step prob) st acts
+            go prob st'
 --   go state0 undefin

@@ -26,3 +26,22 @@ aStar prob state0 target = maybe ([], state0) id $ do
            [ dist1 (st ^. wwPosition + m) target
            | m <- HS.toList $ st ^. wwManipulators
            ]
+
+bfs :: MineProblem -> MineState -> [Action]
+bfs prob state0 = maybe [] id $ do
+  states <- Data.Graph.AStar.aStar (neighbours . snd) (\_ _ -> 1)
+    (heuristicDistance . snd)
+    (\(_, pos) -> HS.member pos (state0 ^. unwrapped)) (DoNothing, state0 ^. wwPosition)
+  return $ map fst states
+  where
+    neighbours :: Point -> HS.HashSet (Action, Point)
+    neighbours pos = HS.fromList
+      [ (m, pos + d) | (m, d) <- restricted, open prob state0 (pos + d)]
+    restricted =
+      [ (MoveLeft, V2 (-1) 0)
+      , (MoveRight, V2 1 0)
+      , (MoveUp, V2 0 1)
+      , (MoveDown, V2 0 (-1))
+      ]
+    heuristicDistance :: a -> Int
+    heuristicDistance _ = 0

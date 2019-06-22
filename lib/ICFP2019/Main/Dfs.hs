@@ -22,7 +22,7 @@ main = do
     go prob st
       | allWrapped st = putStrLn ""
       | otherwise = do
-          foo <- boundedDfs prob (\st -> pure (remainingTiles st, costHeuristic st)) 3 st
+          foo <- boundedDfs prob (\st -> pure (remainingTiles st, costHeuristic st)) 7 st
           case foo of
             (x Seq.:<| _, _) -> do
               putStr $ serialize x
