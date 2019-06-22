@@ -32,14 +32,21 @@ plotLineLow (V2 x0 y0) (V2 x1 y1) =
     let !dx  = x1 - x0
         !dy0 = y1 - y0
         !dy  = if dy0 < 0 then -dy0 else dy0
-        !yi  = if dy0 < 0 then -1 else 1 in
+        !yi  = if dy0 < 0 then -1 else 1
+
+        -- Does a line go nicely through corners?
+        smooth = (dx `mod` dy == 0) && (odd $ dx `div` dy) in
 
     let go !d !x !y
             | x > x1    = []
-            | otherwise = V2 x y :
-                let y' = if d > 0 then y + yi else y
-                    d' = if d > 0 then d - 2 * dx else d in
-                go (d' + 2 * dy) (x + 1) y' in
+            | d > 0     =
+                let y' = y + yi
+                    d' = d - 2 * dx in
+                [V2 x y] ++
+                [V2 x y' | not smooth && x + 1 <= x1] ++
+                go (d' + 2 * dy) (x + 1) y'
+            | otherwise =
+                V2 x y : go (d + 2 * dy) (x + 1) y in
 
     go (2 * dy - dx) x0 y0
 
@@ -49,13 +56,20 @@ plotLineHigh (V2 x0 y0) (V2 x1 y1) =
     let !dx0 = x1 - x0
         !dy  = y1 - y0
         !dx  = if dx0 < 0 then -dx0 else dx0
-        !xi  = if dx0 < 0 then -1 else 1 in
+        !xi  = if dx0 < 0 then -1 else 1
+
+        -- Does a line go nicely through corners?
+        smooth = (dy `mod` dx == 0) && (odd $ dy `div` dx) in
 
     let go !d !x !y
             | y > y1    = []
-            | otherwise = V2 x y :
-                let x'  = if d > 0 then x + xi else x
-                    d'  = if d > 0 then d - 2 * dy else d in
-                go (d' + 2 * dx) x' (y + 1) in
+            | d > 0     =
+                let x' = x + xi
+                    d' = d - 2 * dy in
+                [V2 x y] ++
+                [V2 x' y | not smooth && y + 1 <= y1] ++
+                go (d' + 2 * dx) x' (y + 1)
+            | otherwise =
+                V2 x y : go (d + 2 * dx) x (y + 1) in
 
     go (2 * dx - dy) x0 y0
