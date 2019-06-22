@@ -33,6 +33,7 @@ data Booster
   | Drill
   | Teleport
   | Mysterious
+  | Clone
   deriving (Show, Eq, Ord, Generic)
 
 instance Hashable Booster
