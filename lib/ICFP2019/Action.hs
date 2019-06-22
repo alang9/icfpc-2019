@@ -6,6 +6,9 @@ import qualified Data.Attoparsec.ByteString.Char8 as AP
 import Data.Hashable
 import GHC.Generics (Generic)
 import Linear
+import qualified Data.HashMap.Lazy as HM
+import Data.List (foldl')
+import Data.HashMap.Lazy (HashMap)
 
 data Action
   = MoveUp
@@ -20,6 +23,7 @@ data Action
   | AttachDrill
   | Reset
   | Shift (V2 Int)
+  | DoClone
   deriving (Show, Generic, Ord, Eq)
 
 instance Hashable Action
@@ -32,6 +36,7 @@ parseAction = AP.choice
   , AP.char 'D' *> pure MoveRight
   , AP.char 'Q' *> pure TurnCCW
   , AP.char 'E' *> pure TurnCW
+  , AP.char 'C' *> pure DoClone
   , do
       _ <- AP.char 'B'
       _ <- AP.char '('
@@ -52,6 +57,12 @@ parseAction = AP.choice
       _ <- AP.char ')'
       return $ Shift (V2 x y)
   ]
+
+parseAllActions :: AP.Parser (HashMap Int [Action])
+parseAllActions = 
+  do 
+    actions <- AP.sepBy (AP.many' parseAction) (AP.char '#')
+    return $ foldl' (\accum (k,v) -> HM.insert k v accum) HM.empty (zip [0..] actions)
 
 serialize :: Action -> String
 serialize MoveUp = "W"
