@@ -84,3 +84,7 @@ Executable greedy-dfs
 Executable test-puzzle
   Import:  exe
   Main-is: TestPuzzle.hs
+
+Executable coin-puzzle
+  Import:  exe
+  Main-is: CoinPuzzle.hs

@@ -3,6 +3,7 @@
 module ICFP2019.CoinPuzzle where
 
 import Data.Attoparsec.ByteString
+import System.Environment (getArgs)
 import qualified Data.Attoparsec.ByteString.Char8 as AP
 import qualified Data.ByteString.Char8 as C8
 import Control.Monad.Primitive
@@ -13,6 +14,7 @@ import qualified Data.HashSet as HS
 import Linear hiding (trace)
 import System.Random.MWC
 import qualified ICFP2019.Shape as Shape
+import qualified ICFP2019.State as State
 
 import Debug.Trace
 
@@ -137,13 +139,65 @@ carve PartialSolution {..} pt = PartialSolution newInside newOutside psRequired
         (\p -> HS.member p psOutside)
         pt
 
+data TaskDescription = TaskDescription
+    { tdMap       :: [V2 Int]
+    , tdStart     :: V2 Int
+    , tdObstacles :: [[V2 Int]]
+    , tdBoosters  :: [(State.Booster, V2 Int)]
+    }
+
+partialSolutionToTaskDescription
+    :: Puzzle -> PartialSolution -> TaskDescription
+partialSolutionToTaskDescription Puzzle {..} ps = TaskDescription
+    { tdMap       = Shape.pointSetToOutline (psInside ps)
+    , tdStart     = start
+    , tdObstacles = []
+    , tdBoosters  = zip boosterCodes boosterLocations
+    }
+  where
+    (start, boosterLocations) = case HS.toList (psInside ps) of
+        []      -> error "partialSolutionToTaskDescription: empty inside"
+        (s : b) -> (s, b)
+
+    -- TODO: cNum -> Clone
+    boosterCodes =
+        replicate mNum State.Extension ++
+        replicate fNum State.FastWheels ++
+        replicate dNum State.Drill ++
+        replicate rNum State.Teleport ++
+        replicate xNum State.Mysterious
+
+unparseTaskDescription :: TaskDescription -> String
+unparseTaskDescription TaskDescription {..} =
+    unparseMap tdMap ++ "#" ++
+    unparsePoint tdStart ++ "#" ++
+    intercalate ";" (map unparseMap tdObstacles) ++ "#" ++
+    intercalate ";" (map unparseBooster tdBoosters)
+  where
+    unparseMap = intercalate "," . map unparsePoint
+
+    unparsePoint (V2 x y) = "(" ++ show x ++ "," ++ show y ++ ")"
+
+    unparseBooster (c, p) = unparseBoosterCode c ++ unparsePoint p
+
+    unparseBoosterCode State.Extension  = "B"
+    unparseBoosterCode State.FastWheels = "F"
+    unparseBoosterCode State.Drill      = "D"
+    unparseBoosterCode State.Mysterious = "X"
+    unparseBoosterCode State.Teleport   = "R"
+
+
 puzzle1Bs :: C8.ByteString
 puzzle1Bs = C8.pack "2,1,200,400,1200,6,10,5,1,3,4#(147,109),(123,95),(28,120),(105,50),(106,123),(131,82),(153,10),(63,96),(116,188),(112,62),(121,56),(151,140),(142,55),(63,184),(47,170),(90,144),(39,117),(82,159),(116,92),(48,128),(171,119),(96,97),(169,158),(106,156),(87,175),(100,37),(42,62),(29,195),(97,145),(181,162),(170,64),(95,101),(75,106),(99,87),(162,129),(188,10),(177,79),(117,116),(17,92),(176,129),(16,108),(111,88),(34,142),(44,146),(147,18),(107,109),(173,12),(59,190),(102,129),(56,102)#(61,157),(143,168),(15,169),(184,195),(156,102),(81,73),(133,179),(2,148),(187,193),(175,101),(23,83),(131,1),(85,29),(115,168),(64,55),(52,133),(105,148),(80,14),(115,34),(1,82),(46,52),(42,138),(184,194),(135,139),(178,81),(0,50),(128,35),(140,7),(69,149),(181,193),(167,67),(119,151),(151,188),(197,2),(148,80),(191,94),(16,195),(61,28),(156,176),(196,47),(81,188),(60,177),(87,80),(171,100),(18,40),(128,25),(1,22),(116,130),(170,170),(123,19)"
 
 main :: IO ()
 main = do
+    (arg : _) <- getArgs
+    content   <- C8.readFile arg
+    puzzle <- case AP.parseOnly puzzleParser content of
+        Left err -> fail $ "Puzzle parse fail: " ++ show err
+        Right x  -> return x
     gen <- createSystemRandom
-    sol <- keepCarving gen puzzle1 (initialCarves puzzle1)
-    putStrLn $ partialSolutionToAscii puzzle1 sol
-  where
-    Right puzzle1 = AP.parseOnly puzzleParser puzzle1Bs
+    sol <- keepCarving gen puzzle (initialCarves puzzle)
+    putStrLn $ unparseTaskDescription $
+        partialSolutionToTaskDescription puzzle sol
