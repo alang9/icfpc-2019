@@ -38,7 +38,7 @@ main = do
                   traceShowM $ (concat $ serialize <$> xs, remainingTiles st', finSco)
                   putStr $ serialize x
                   go gen prob (either (error "impossible") id $ step prob st x)
-              | otherwise -> case bfs prob st of -- If doing greedy dfs doesn't give anything good, just do regular bfs
+              | otherwise -> case bfs False prob st of -- If doing greedy dfs doesn't give anything good, just do regular bfs
                   [] -> error "bad greedy"
                   acts -> do
                     let st' = foldl' (fmap (either (error "oops9") id) . step prob) st acts

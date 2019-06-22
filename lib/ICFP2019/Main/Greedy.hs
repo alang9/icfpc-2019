@@ -1,7 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 module ICFP2019.Main.Greedy where
 
-import Control.Lens
 import qualified Data.Attoparsec.ByteString as AP
 import qualified Data.ByteString.Char8 as C8
 import Data.List
@@ -25,7 +24,7 @@ main = do
   where
     go turns prob !st
       | allWrapped st = traceShowM ("turns", turns)
-      | otherwise = case bfs prob st of
+      | otherwise = case bfs True prob st of
           [] -> error "bad greedy"
           acts -> do
             putStr $ concat $ serialize <$> acts

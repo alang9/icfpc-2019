@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE LambdaCase #-}
 
@@ -39,30 +40,49 @@ aStar prob state0 target = maybe ([], state0) id $ do
            | m <- HS.toList $ st ^. wwManipulators
            ]
 
-bfs :: MineProblem -> MineState -> [Action]
-bfs prob state0 = maybe [] id $ do
+bfs :: Bool -> MineProblem -> MineState -> [Action]
+bfs allowTurns prob state0 = maybe [] id $ do
   states <- Data.Graph.AStar.aStar (neighbours . snd)
-    (\_ (_, (newPos, _, _)) -> V2 1 (negate $ length [ () | offset <- manips, HS.member (newPos + offset) (state0 ^. unwrapped)]))
+    (\_ (_, ((newPos, newOrient), _, _)) -> V2 1 (negate $ length [ () | offset <- manips' newOrient, HS.member (newPos + offset) (state0 ^. unwrapped)]))
     (heuristicDistance . snd)
-    (\(_, (pos, _, _)) -> or [HS.member (pos + offset) (state0 ^. unwrapped) | offset <- manips])
-    (DoNothing, (state0 ^. wwPosition, state0 ^. activeFastWheels, state0 ^. activeDrill))
+    (\(_, ((pos, orient), _, _)) -> or [HS.member (pos + offset) (state0 ^. unwrapped) | offset <- manips' orient])
+    (DoNothing, ((state0 ^. wwPosition, state0 ^. wwOrientation), state0 ^. activeFastWheels, state0 ^. activeDrill))
   return $ map fst states
   where
     manips = HS.toList $ state0 ^. wwManipulators
-    neighbours :: (Point, Int, Int) -> HS.HashSet (Action, (Point, Int, Int))
-    neighbours (pos, fw, ad) =
-      HS.fromList
-        [ if fw > 0 && (open prob state0 (pos + d + d) || (inMine prob (pos + d + d) && ad > 0)) then (m, (pos + d + d, fw', ad')) else (m, (pos + d, fw', ad'))
-        | (m, d) <- restricted, open prob state0 (pos + d) || (inMine prob (pos + d) && ad > 0)
-        ]
+    manips' orient = case mod (orient - state0 ^. wwOrientation) 4 of
+      0 -> manips0
+      1 -> manips1
+      2 -> manips2
+      3 -> manips3
+    rot (V2 x y) = V2 y (-x)
+    (!manips0):(!manips1):(!manips2):(!manips3):_ = iterate (map rot) $ manips
+    neighbours :: ((Point, Int), Int, Int) -> HS.HashSet (Action, ((Point, Int), Int, Int))
+    neighbours ((pos, orient), fw, ad) =
+      HS.fromList $
+        [ if fw > 0 && (open prob state0 (pos + d + d) || (inMine prob (pos + d + d) && ad > 0))
+            then (m, ((pos + d + d, orient), fw', ad'))
+            else (m, ((pos + d, orient), fw', ad'))
+        | (m, d) <- moves, open prob state0 (pos + d) || (inMine prob (pos + d) && ad > 0)
+        ] ++
+        if allowTurns
+          then
+            [ (m, ((pos, mod (orient + d) 4), fw', ad'))
+            | (m, d) <- turns
+            ]
+          else []
       where
         fw' = max 0 $ fw - 1
         ad' = max 0 $ ad - 1
-    restricted =
+    moves =
       [ (MoveLeft, V2 (-1) 0)
       , (MoveRight, V2 1 0)
       , (MoveUp, V2 0 1)
       , (MoveDown, V2 0 (-1))
+      ]
+    turns =
+      [ (TurnCW, 1)
+      , (TurnCCW, -1)
       ]
     heuristicDistance :: a -> V2 Int
     heuristicDistance _ = V2 0 0
