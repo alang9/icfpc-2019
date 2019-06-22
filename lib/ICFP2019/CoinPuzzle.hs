@@ -78,7 +78,7 @@ findArea Puzzle {..} = trace pp finalArea
               | HS.member (V2 x y) finalArea -> '#'
               | otherwise -> ' '
         | x <- [0..tSize - 1]]
-      | y <- [0..tSize-1]]
+      | y <- [tSize-1,tSize-2..0]]
     (finalArea, _) = foldl' carve (initialArea, initialTarget) oSqs
     initialArea = HS.fromList [ V2 x y | x <- [0..tSize - 1], y <- [0..tSize - 1]]
     initialTarget = HS.fromList $

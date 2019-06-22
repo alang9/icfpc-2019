@@ -182,11 +182,12 @@ pointSetToOutline set =
       where
         goLeft p
             | l p `HS.member` set = goLeft (l p)
-            | otherwise           = goDown p
+            | d p `HS.member` set = goDown (d p)
+            | otherwise           = p
 
         goDown p
             | d p `HS.member` set = goDown (d p)
-            | otherwise           = p
+            | otherwise           = goLeft p
 
     u, r, d, l :: V2 Int -> V2 Int
     u p = p + V2 0 1
