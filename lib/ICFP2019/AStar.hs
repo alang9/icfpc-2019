@@ -67,6 +67,7 @@ randomBfs gen prob state0 = do
     (pure . heuristicDistance . snd)
     (\(_, (pos, _, _)) -> pure $ or [HS.member (pos + offset) (state0 ^. unwrapped) | offset <- manips])
     (pure (DoNothing, (state0 ^. wwPosition, state0 ^. activeFastWheels, state0 ^. activeDrill)))
+  -- traceShowM (map snd <$> states)
   return $ maybe [] (map fst) states
   where
     manips = HS.toList $ state0 ^. wwManipulators
@@ -97,5 +98,5 @@ boundedBfs gen turns prob st
             let st' = foldl' (fmap (either (error "oops1") id) . step prob) st acts
             return (Seq.fromList acts, st')
         | otherwise -> do
-            let st' = foldl' (\oldSt act -> either (\ex -> error $ "oops2 " ++ show (ex, act, acts, st ^. wwPosition, oldSt ^. wwPosition)) id $ step prob oldSt act) st acts
-            boundedBfs gen (turns - length acts) prob st' <&> _1 %~ (Seq.fromList acts <>)
+            let (st', acceptedActs) = foldl' (\(oldSt, acc) act -> case step prob oldSt act of Left ex -> traceShow ("error", ex) (oldSt, acc); Right newSt -> (newSt, act:acc) ) (st, []) acts
+            boundedBfs gen (turns - length acceptedActs) prob st' <&> _1 %~ (Seq.fromList (reverse acceptedActs) <>)
