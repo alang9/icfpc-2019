@@ -9,7 +9,6 @@ SOLUTION_FILE="prob-$(printf "%03d" "$PROBLEM").sol"
 echo "Downloading problem from S3..." 1>&2
 aws s3 cp "s3://icfp2019-problems/$PROBLEM_FILE" "./$PROBLEM_FILE"
 
-wc "$PROBLEM_FILE"
-cp "$PROBLEM_FILE" "$SOLUTION_FILE"
+./bin/greedy "$PROBLEM_FILE" >"$SOLUTION_FILE"
 
 aws s3 cp "./$SOLUTION_FILE" "s3://$SOL_BUCKET_NAME/$SOLUTION_FILE"
