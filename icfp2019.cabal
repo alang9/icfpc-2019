@@ -26,6 +26,7 @@ Library
   Exposed-modules:
     ICFP2019.AStar
     ICFP2019.Action
+    ICFP2019.Bresenham
     ICFP2019.DFS
     ICFP2019.Main.Dfs
     ICFP2019.Main.Greedy
@@ -34,7 +35,9 @@ Library
     ICFP2019.Main.V0
     ICFP2019.Shape
     ICFP2019.State
+    MBA
     MHeap
+    Util
 
   Build-depends:
     base,
