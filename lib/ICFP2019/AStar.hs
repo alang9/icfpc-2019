@@ -41,25 +41,31 @@ aStar prob state0 target = maybe ([], state0) id $ do
 
 bfs :: MineProblem -> MineState -> [Action]
 bfs prob state0 = maybe [] id $ do
-  states <- Data.Graph.AStar.aStar (neighbours . snd) (\_ _ -> 1)
+  states <- Data.Graph.AStar.aStar (neighbours . snd)
+    (\_ (_, (newPos, _, _)) -> V2 1 (negate $ length [ () | offset <- manips, HS.member (newPos + offset) (state0 ^. unwrapped)]))
     (heuristicDistance . snd)
-    (\(_, (pos, _)) -> HS.member pos (state0 ^. unwrapped)) (DoNothing, (state0 ^. wwPosition, state0 ^. activeFastWheels))
+    (\(_, (pos, _, _)) -> or [HS.member (pos + offset) (state0 ^. unwrapped) | offset <- manips])
+    (DoNothing, (state0 ^. wwPosition, state0 ^. activeFastWheels, state0 ^. activeDrill))
   return $ map fst states
   where
-    neighbours :: (Point, Int)-> HS.HashSet (Action, (Point, Int))
-    neighbours (pos, fw) = ns
+    manips = HS.toList $ state0 ^. wwManipulators
+    neighbours :: (Point, Int, Int) -> HS.HashSet (Action, (Point, Int, Int))
+    neighbours (pos, fw, ad) =
+      HS.fromList
+        [ if fw > 0 && (open prob state0 (pos + d + d) || (inMine prob (pos + d + d) && ad > 0)) then (m, (pos + d + d, fw', ad')) else (m, (pos + d, fw', ad'))
+        | (m, d) <- restricted, open prob state0 (pos + d) || (inMine prob (pos + d) && ad > 0)
+        ]
       where
         fw' = max 0 $ fw - 1
-        ns = HS.fromList
-           [ if fw > 0 && open prob state0 (pos + d + d) then (m, (pos + d + d, fw')) else (m, (pos + d, fw')) | (m, d) <- restricted, open prob state0 (pos + d)]
+        ad' = max 0 $ ad - 1
     restricted =
       [ (MoveLeft, V2 (-1) 0)
       , (MoveRight, V2 1 0)
       , (MoveUp, V2 0 1)
       , (MoveDown, V2 0 (-1))
       ]
-    heuristicDistance :: a -> Int
-    heuristicDistance _ = 0
+    heuristicDistance :: a -> V2 Int
+    heuristicDistance _ = V2 0 0
 
 randomBfs :: forall m. (PrimMonad m) => Gen (PrimState m) -> MineProblem -> MineState -> m [Action]
 randomBfs gen prob state0 = do
