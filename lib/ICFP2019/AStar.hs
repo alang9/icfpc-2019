@@ -91,7 +91,7 @@ boundedBfs gen turns prob st
   | otherwise = randomBfs gen prob st >>= \case
       [] -> error "bounded bad greedy"
       acts
-        | length acts > turns -> do
+        | length acts >= turns -> do
             let st' = foldl' (fmap (either (error "oops") id) . step prob) st acts
             return (Seq.fromList acts, st')
         | otherwise -> do
