@@ -90,6 +90,7 @@ data ActionException
   | CantAttachManipulator
   | NoSpace
   | InvalidShift
+  | InvalidCloneLocation
   deriving (Show)
 
 makeOneWorker :: WorkerState -> FullState -> OneWorkerState 
@@ -139,6 +140,9 @@ updateFullStateWith f fullstate workerIndex = case selectWorker fullstate worker
   Just result -> 
       Just $ updateFullState workerIndex result fullstate
      
+startingManip :: HashSet (V2 Int)
+startingManip = HS.fromList [V2 0 0, V2 1 0, V2 1 1, V2 1 (-1)]
+
 initialParser :: AP.Parser (MineProblem, FullState)
 initialParser = do
     boundary0 <- shapeParser
@@ -171,7 +175,6 @@ initialParser = do
     return (mineProb, initialSt)
   where
     allTiles sha = Shape.toHashSet sha
-    startingManip = HS.fromList [V2 0 0, V2 1 0, V2 1 1, V2 1 (-1)]
     boosterParser = do
       whichBooster <- AP.char 'B' *> pure Extension
         <|> AP.char 'F' *> pure FastWheels
@@ -198,25 +201,25 @@ validNewManipulatorPositions state0 = HS.unions [HS.map ((+) dir) $ state0 ^. ww
 
 step :: MineProblem -> OneWorkerState -> Action -> Either ActionException OneWorkerState
 step prob state0 act = case act of
-  DoNothing -> pure $ tickTime state0
+  DoNothing -> pure $ state0
   MoveUp -> doMove (V2 0 1)
   MoveDown -> doMove (V2 0 (-1))
   MoveLeft -> doMove (V2 (-1) 0)
   MoveRight -> doMove (V2 1 0)
-  TurnCW -> pure $ tickTime $ movePosition' (V2 0 0) $ state0
+  TurnCW -> pure $ movePosition' (V2 0 0) $ state0
     & wwManipulators %~ HS.map (\(V2 x y) -> V2 y (-x))
     & wwOrientation %~ mod 4 . succ
   TurnCCW ->
-    pure $ tickTime $ movePosition' (V2 0 0) $ state0
+    pure $ movePosition' (V2 0 0) $ state0
     & wwManipulators %~ HS.map (\(V2 x y) -> V2 (-y) x)
     & wwOrientation %~ mod 4 . pred
   AttachFastWheels -> if HM.lookupDefault 0 FastWheels (state0 ^. collectedBoosters) > 0
-    then Right $ (tickTime $ state0
+    then Right $ (state0
       & collectedBoosters %~ HM.adjust pred FastWheels)
       & activeFastWheels %~ (+) 50
     else Left NoBooster
   AttachDrill -> if HM.lookupDefault 0 Drill (state0 ^. collectedBoosters) > 0
-    then Right $ tickTime $ (state0
+    then Right $ (state0
       & collectedBoosters %~ HM.adjust pred Drill)
       & activeDrill %~ (+) 30
     else Left NoBooster
@@ -224,20 +227,20 @@ step prob state0 act = case act of
     then
       if HS.member rp (validNewManipulatorPositions state0)
         then
-          Right $ tickTime $ applyWrapped $ state0
+          Right $ applyWrapped $ state0
             & wwManipulators %~ HS.insert rp
             & collectedBoosters %~ HM.adjust pred Extension
         else Left CantAttachManipulator
     else Left NoBooster
   Reset -> if HM.lookupDefault 0 Teleport (state0 ^. collectedBoosters) > 0
     then
-      Right $ tickTime $ applyWrapped $ state0
+      Right $ applyWrapped $ state0
             & beaconLocations %~ HS.insert (state0 ^. wwPosition)
             & collectedBoosters %~ HM.adjust pred Teleport
     else Left NoBooster
   Shift pos -> if HS.member pos (state0 ^. beaconLocations)
     then
-      Right $ tickTime $ applyWrapped $ state0 & wwPosition .~ pos
+      Right $ applyWrapped $ state0 & wwPosition .~ pos
     else Left InvalidShift
   where
     doMove rp = maybe (Left NoSpace) Right $ do
@@ -245,9 +248,9 @@ step prob state0 act = case act of
       if state0 ^. activeFastWheels > 0
         then do
           case movePosition rp prob state1 of
-            Nothing -> return $ tickTime state1
-            Just state2 -> return $ tickTime state2
-        else return $ tickTime state1
+            Nothing -> return $ state1
+            Just state2 -> return $ state2
+        else return $ state1
 
 passable :: MineProblem -> Point -> OneWorkerState -> Bool
 passable prob pt state0 = inMine prob pt && (notWall || hasDrill)
@@ -311,11 +314,14 @@ getBooster pt state0 = case HM.lookup pt $ state0 ^. boosters of
     & boosters %~ HM.delete pt
     & collectedBoosters %~ HM.insertWith (+) b 1
 
-tickTime :: OneWorkerState -> OneWorkerState
-tickTime state0 = state0
-  & activeFastWheels %~ max 0 . subtract 1
-  & activeDrill %~ max 0 . subtract 1
-  & timeSpent %~ (+) 1
+tickTimeAll :: FullState -> FullState
+tickTimeAll state0 = state0
+  & fTimeSpent %~ (+) 1
+  & fWorkers %~ HM.map decTimeRemaining
+  where
+    decTimeRemaining workerState = workerState 
+      & wActiveFastWheels  %~ max 0 . subtract 1 
+      & wActiveDrill %~ max 0 . subtract 1
 
 interestingActions :: MineProblem -> OneWorkerState -> [Action]
 interestingActions prob state0 = concat
@@ -330,6 +336,9 @@ interestingActions prob state0 = concat
   , if maybe False (> 0) $ HM.lookup Teleport (state0 ^. collectedBoosters) then [Reset] else []
   , if maybe False (> 0) $ HM.lookup Extension (state0 ^. collectedBoosters) then [AttachManipulator pt | pt <- HS.toList (validNewManipulatorPositions state0), notWrapped state0 pt ] else []
   , [Shift loc | loc <- HS.toList (state0 ^. beaconLocations)]
+  , case HM.lookup (state0 ^. wwPosition) (state0 ^. boosters) of
+      Just Mysterious -> if maybe False (> 0) $ HM.lookup Clone (state0 ^. collectedBoosters) then [DoClone] else []
+      _ -> []
   , [DoNothing]
   ]
 
@@ -348,19 +357,35 @@ stepSingleWorker prob fullState workerIndex action = case selectWorker fullState
   Just oneWorkerState -> case step prob oneWorkerState action of
     Left error -> Left error
     Right oneWorkerState1 -> Right (updateFullState workerIndex oneWorkerState1 fullState)
+
+doClone :: MineProblem -> FullState -> Int -> Either ActionException FullState
+doClone prob fullState workerIndex = case selectWorker fullState workerIndex of
+  Nothing -> Right fullState
+  Just oneWorkerState -> case HM.lookup (oneWorkerState ^. wwPosition) (oneWorkerState ^. boosters) of
+    Just Mysterious -> 
+      Right (fullState & fWorkers %~ HM.insert 0 
+        WorkerState
+          { _wPosition = oneWorkerState ^. wwPosition
+          , _wOrientation = oneWorkerState ^. wwOrientation
+          , _wManipulators = startingManip
+          , _wActiveFastWheels = 0
+          , _wActiveDrill = 0
+          })
+    _ -> Left InvalidCloneLocation
   
 stepAllWorkers :: 
   MineProblem -> 
   FullState -> 
   HashMap Int [Action] -> 
   Either ActionException (FullState, HashMap Int [Action]) 
-stepAllWorkers prob state0 actions =
-  HM.foldlWithKey' (\accum workerIndex actions -> case accum of 
-    Left error -> Left error
-    Right (state0, remaining_actions) -> case actions of
-      DoClone : _ -> Left InvalidShift
-      action : rest -> case stepSingleWorker prob state0 workerIndex action of
-        Left error -> Left error
-        Right state1 -> Right (state1, HM.insert workerIndex rest remaining_actions))
-    (Right (state0, HM.empty))
-    actions
+stepAllWorkers prob state0 actions = fmap (\(state, actions) -> (tickTimeAll state, actions)) result
+  where
+    result = HM.foldlWithKey' (\accum workerIndex actions -> case accum of 
+      Left error -> Left error
+      Right (state0, remaining_actions) -> case actions of
+        DoClone : _ -> Left InvalidShift
+        action : rest -> case stepSingleWorker prob state0 workerIndex action of
+          Left error -> Left error
+          Right state1 -> Right (state1, HM.insert workerIndex rest remaining_actions))
+      (Right (state0, HM.empty))
+      actions
