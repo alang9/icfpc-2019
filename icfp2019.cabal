@@ -28,6 +28,7 @@ Library
     ICFP2019.Action
     ICFP2019.Bresenham
     ICFP2019.DFS
+    ICFP2019.Main.CoinPuzzle
     ICFP2019.Main.Dfs
     ICFP2019.Main.Greedy
     ICFP2019.Main.GreedyDfs
@@ -35,7 +36,6 @@ Library
     ICFP2019.Main.V0
     ICFP2019.Shape
     ICFP2019.State
-    ICFP2019.CoinPuzzle
     MBA
     MHeap
     Util
@@ -80,10 +80,6 @@ Executable greedy
 Executable greedy-dfs
   Import:  exe
   Main-is: GreedyDfs.hs
-
-Executable test-puzzle
-  Import:  exe
-  Main-is: TestPuzzle.hs
 
 Executable coin-puzzle
   Import:  exe

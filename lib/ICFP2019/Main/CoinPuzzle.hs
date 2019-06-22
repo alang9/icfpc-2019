@@ -1,6 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 
-module ICFP2019.CoinPuzzle where
+module ICFP2019.Main.CoinPuzzle where
 
 import Data.Attoparsec.ByteString
 import System.Environment (getArgs)
@@ -182,7 +182,7 @@ unparseTaskDescription TaskDescription {..} =
 
     unparseBoosterCode State.Extension  = "B"
     unparseBoosterCode State.FastWheels = "F"
-    unparseBoosterCode State.Drill      = "D"
+    unparseBoosterCode State.Drill      = "L"
     unparseBoosterCode State.Mysterious = "X"
     unparseBoosterCode State.Teleport   = "R"
 
@@ -199,5 +199,5 @@ main = do
         Right x  -> return x
     gen <- createSystemRandom
     sol <- keepCarving gen puzzle (initialCarves puzzle)
-    putStrLn $ unparseTaskDescription $
+    putStr $ unparseTaskDescription $
         partialSolutionToTaskDescription puzzle sol
