@@ -1,8 +1,10 @@
 module ICFP2019.Main.GreedyDfs where
 
+import Control.Lens
 import Control.Monad
 import qualified Data.Attoparsec.ByteString as AP
 import qualified Data.ByteString.Char8 as C8
+import qualified Data.HashSet as HS
 import Data.List
 import qualified Data.Sequence as Seq
 import System.Environment
@@ -29,10 +31,10 @@ main = do
     go gen prob st
       | allWrapped st = putStrLn ""
       | otherwise = do
-          foo <- randomBoundedDfs gen prob (\st' -> do (acts, st'') <- boundedBfs gen 100 prob st'; traceShowM ("acts", acts, remainingTiles st''); return (length acts, remainingTiles st'')) 1 st
+          foo <- randomBoundedDfs gen prob (\st' -> do (acts, st'') <- boundedBfs gen 100 prob st'; return (remainingTiles st'', length acts, negate (HS.size (st' ^. beaconLocations)), negate $ sum (st' ^. collectedBoosters), remainingTiles st')) 1 st
           case foo of
             (xs@(x Seq.:<| _), st', finSco)
-              | x /= DoNothing -> do
+              | x /= DoNothing && view _2 finSco < remainingTiles st -> do
                   traceShowM $ (concat $ serialize <$> xs, remainingTiles st', finSco)
                   putStr $ serialize x
                   go gen prob (either (error "impossible") id $ step prob st x)
@@ -41,5 +43,6 @@ main = do
                   acts -> do
                     let st' = foldl' (fmap (either (error "oops9") id) . step prob) st acts
                     forM_ acts $ \act -> putStr $ serialize act
+                    traceShowM ("greedy", length acts)
                     go gen prob st'
 --   go state0 undefin

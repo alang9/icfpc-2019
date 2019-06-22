@@ -18,6 +18,8 @@ data Action
   | AttachManipulator (V2 Int)
   | AttachFastWheels
   | AttachDrill
+  | Reset
+  | Shift (V2 Int)
   deriving (Show, Generic, Ord, Eq)
 
 instance Hashable Action
@@ -40,6 +42,15 @@ parseAction = AP.choice
       return $ AttachManipulator (V2 dx dy)
   , AP.char 'F' *> pure AttachFastWheels
   , AP.char 'L' *> pure AttachDrill
+  , AP.char 'R' *> pure Reset
+  , do
+      _ <- AP.char 'T'
+      _ <- AP.char '('
+      x <- AP.signed AP.decimal
+      _ <- AP.char ','
+      y <- AP.signed AP.decimal
+      _ <- AP.char ')'
+      return $ Shift (V2 x y)
   ]
 
 serialize :: Action -> String
@@ -53,3 +64,5 @@ serialize TurnCCW = "Q"
 serialize (AttachManipulator (V2 dx dy)) = "B(" ++ show dx ++ "," ++ show dy ++ ")"
 serialize AttachFastWheels = "F"
 serialize AttachDrill = "L"
+serialize Reset = "R"
+serialize (Shift (V2 x y)) = "T(" ++ show x ++ "," ++ show y ++ ")"

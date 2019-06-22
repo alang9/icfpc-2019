@@ -31,6 +31,7 @@ data Booster
   = Extension
   | FastWheels
   | Drill
+  | Teleport
   | Mysterious
   deriving (Show, Eq, Ord, Generic)
 
@@ -54,6 +55,7 @@ data MineState = MineState
   , _activeFastWheels :: !TimeRemaining
   , _activeDrill :: !TimeRemaining
   , _timeSpent :: !Int
+  , _beaconLocations :: !(HashSet Point)
   } deriving (Show, Eq, Ord, Generic)
 
 instance Hashable MineState
@@ -64,6 +66,7 @@ data ActionException
   = NoBooster
   | CantAttachManipulator
   | NoSpace
+  | InvalidShift
   deriving (Show)
 
 initialParser :: AP.Parser (MineProblem, MineState)
@@ -89,6 +92,7 @@ initialParser = do
           , _activeFastWheels = 0
           , _activeDrill = 0
           , _timeSpent = 0
+          , _beaconLocations = mempty
           }
     return (mineProb, initialSt)
   where
@@ -100,6 +104,7 @@ initialParser = do
         <|> AP.char 'F' *> pure FastWheels
         <|> AP.char 'L' *> pure Drill
         <|> AP.char 'X' *> pure Mysterious
+        <|> AP.char 'R' *> pure Teleport
       pt <- pairParser
       return (pt, whichBooster)
     shapeParser = do
@@ -151,6 +156,16 @@ step prob state0 act = case act of
             & collectedBoosters %~ HM.adjust pred Extension
         else Left CantAttachManipulator
     else Left NoBooster
+  Reset -> if HM.lookupDefault 0 Teleport (state0 ^. collectedBoosters) > 0
+    then
+      Right $ tickTime $ applyWrapped $ state0
+            & beaconLocations %~ HS.insert (state0 ^. wwPosition)
+            & collectedBoosters %~ HM.adjust pred Teleport
+    else Left NoBooster
+  Shift pos -> if HS.member pos (state0 ^. beaconLocations)
+    then
+      Right $ tickTime $ applyWrapped $ state0 & wwPosition .~ pos
+    else Left InvalidShift
   where
     doMove rp = maybe (Left NoSpace) Right $ do
       state1 <- movePosition rp prob state0
@@ -237,6 +252,8 @@ interestingActions prob state0 = concat
   , [TurnCCW]
   , if maybe False (> 0) $ HM.lookup FastWheels (state0 ^. collectedBoosters) then [AttachFastWheels] else []
   , if maybe False (> 0) $ HM.lookup Drill (state0 ^. collectedBoosters) then [AttachDrill] else []
+  , if maybe False (> 0) $ HM.lookup Teleport (state0 ^. collectedBoosters) then [Reset] else []
   , if maybe False (> 0) $ HM.lookup Extension (state0 ^. collectedBoosters) then [AttachManipulator pt | pt <- HS.toList (validNewManipulatorPositions state0), notWrapped state0 pt ] else []
+  , [Shift loc | loc <- HS.toList (state0 ^. beaconLocations)]
   , [DoNothing]
   ]

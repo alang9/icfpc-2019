@@ -90,7 +90,10 @@ boundedBfs gen turns prob st
   | allWrapped st || turns <= 0 = pure (mempty, st)
   | otherwise = randomBfs gen prob st >>= \case
       [] -> error "bounded bad greedy"
-      acts -> do
-        let acts' = take turns acts
-        let st' = foldl' (fmap (either (error "oops") id) . step prob) st acts'
-        boundedBfs gen (turns - length acts') prob st' <&> _1 %~ (Seq.fromList acts' <>)
+      acts
+        | length acts >= turns -> do
+            let st' = foldl' (fmap (either (error "oops") id) . step prob) st acts
+            return (Seq.fromList acts, st')
+        | otherwise -> do
+            let st' = foldl' (fmap (either (error "oops") id) . step prob) st acts
+            boundedBfs gen (turns - length acts) prob st' <&> _1 %~ (Seq.fromList acts <>)

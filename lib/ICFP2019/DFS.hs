@@ -66,16 +66,16 @@ randomBoundedDfs gen prob fitness maxDepth initial = do
         !fit <- fitness st
         return (acts, st, fit)
     | remDepth <= 0 = do
-        traceShowM ("foo", initialFit, acts)
+        -- traceShowM ("foo", initialFit, acts)
         !fit <- fitness st
-        traceShowM ("foo2", fit, initialFit, acts)
+        -- traceShowM ("foo2", fit, initialFit, acts)
         return (acts, st, fit)
     | otherwise = randomDfsOneStep gen prob st >>= \case
         [] -> do
           !fit <- fitness st
           return (mempty, st, fit)
         xs@(_:_) -> do
-          when (remDepth == maxDepth) $ traceShowM ("top", map fst xs)
+          -- when (remDepth == maxDepth) $ traceShowM ("top", map fst xs)
           xs' <- mapM (\(act, st') -> go initialFit (remDepth - 1) st' (acts Seq.:|> act)) xs
           return $ minimumBy (comparing $ \(_, _, score) -> score) xs'
   -- fitness' a = (\b -> (b, costHeuristic a)) <$> fitness a
