@@ -16,6 +16,7 @@ import Data.HashSet (HashSet)
 import qualified Data.Vector.Unboxed as VU
 import GHC.Generics (Generic)
 import Linear
+import Data.List (sort)
 
 import qualified ICFP2019.Shape as Shape
 import ICFP2019.Shape (Shape)
@@ -181,6 +182,7 @@ initialParser = do
         <|> AP.char 'L' *> pure Drill
         <|> AP.char 'X' *> pure Mysterious
         <|> AP.char 'R' *> pure Teleport
+        <|> AP.char 'C' *> pure Clone
       pt <- pairParser
       return (pt, whichBooster)
     shapeParser = do
@@ -304,12 +306,13 @@ remainingTiles state0 = HS.size (state0 ^. unwrapped)
 numTiles :: MineProblem -> Int
 numTiles = VU.length . VU.filter id . view (boundary . Shape.points)
 
-missingTiles :: OneWorkerState -> HashSet Point
-missingTiles = view unwrapped
+missingTiles :: FullState -> HashSet Point
+missingTiles = view fUnwrapped
 
 getBooster :: Point -> OneWorkerState -> OneWorkerState
 getBooster pt state0 = case HM.lookup pt $ state0 ^. boosters of
   Nothing -> state0
+  Just Mysterious -> state0
   Just b -> state0
     & boosters %~ HM.delete pt
     & collectedBoosters %~ HM.insertWith (+) b 1
@@ -351,20 +354,19 @@ interestingActionsAll prob state0 =
       Nothing -> []
       Just oneWorkerState -> interestingActions prob oneWorkerState 
 
-stepSingleWorker :: MineProblem -> FullState -> Int -> Action -> Either ActionException FullState
+stepSingleWorker :: MineProblem -> FullState -> Int -> Action -> Either ActionException (Maybe FullState)
 stepSingleWorker prob fullState workerIndex action = case selectWorker fullState workerIndex of
-  Nothing -> Right fullState
+  Nothing -> Right Nothing 
   Just oneWorkerState -> case step prob oneWorkerState action of
     Left error -> Left error
-    Right oneWorkerState1 -> Right (updateFullState workerIndex oneWorkerState1 fullState)
+    Right oneWorkerState1 -> Right $ Just $ (updateFullState workerIndex oneWorkerState1 fullState)
 
-doClone :: MineProblem -> FullState -> Int -> Either ActionException FullState
+doClone :: MineProblem -> FullState -> Int -> Either ActionException (Maybe WorkerState)
 doClone prob fullState workerIndex = case selectWorker fullState workerIndex of
-  Nothing -> Right fullState
+  Nothing -> Right Nothing 
   Just oneWorkerState -> case HM.lookup (oneWorkerState ^. wwPosition) (oneWorkerState ^. boosters) of
     Just Mysterious -> 
-      Right (fullState & fWorkers %~ HM.insert 0 
-        WorkerState
+      Right $ Just (WorkerState
           { _wPosition = oneWorkerState ^. wwPosition
           , _wOrientation = oneWorkerState ^. wwOrientation
           , _wManipulators = startingManip
@@ -373,19 +375,33 @@ doClone prob fullState workerIndex = case selectWorker fullState workerIndex of
           })
     _ -> Left InvalidCloneLocation
   
+addWorker :: FullState -> WorkerState -> FullState
+addWorker state0 worker =
+  state0 & fWorkers %~ HM.insert index worker
+  where
+    index = length (state0 ^. fWorkers)
+
 stepAllWorkers :: 
   MineProblem -> 
   FullState -> 
   HashMap Int [Action] -> 
   Either ActionException (FullState, HashMap Int [Action]) 
-stepAllWorkers prob state0 actions = fmap (\(state, actions) -> (tickTimeAll state, actions)) result
+stepAllWorkers prob state0 actions = fmap (\(state1, newWorkers, actions) -> 
+  (tickTimeAll $ addWorkers newWorkers state1, actions)) result
   where
-    result = HM.foldlWithKey' (\accum workerIndex actions -> case accum of 
+    result = foldl' (\accum (workerIndex, actions) -> case accum of 
       Left error -> Left error
-      Right (state0, remaining_actions) -> case actions of
-        DoClone : _ -> Left InvalidShift
-        action : rest -> case stepSingleWorker prob state0 workerIndex action of
+      Right (state0, newWorkers, remainingActions) -> case actions of
+        all@(DoClone : rest) -> case doClone prob state0 workerIndex of
           Left error -> Left error
-          Right state1 -> Right (state1, HM.insert workerIndex rest remaining_actions))
-      (Right (state0, HM.empty))
-      actions
+          Right (Just newWorker) -> Right (state0, newWorker : newWorkers, HM.insert workerIndex rest remainingActions)
+          Right Nothing -> Right (state0, newWorkers, HM.insert workerIndex all remainingActions)
+        all@(action : rest) -> case stepSingleWorker prob state0 workerIndex action of
+          Left error -> Left error
+          Right Nothing -> Right (state0, newWorkers, HM.insert workerIndex all remainingActions)
+          Right (Just state1) -> Right (state1, newWorkers, HM.insert workerIndex rest remainingActions)
+        [] -> Right (state0, newWorkers, remainingActions))
+      (Right (state0, [], HM.empty))
+      (sort $ HM.toList actions)
+    addWorkers newWorkers state =
+      foldl' addWorker state newWorkers 

@@ -18,31 +18,31 @@ import ICFP2019.AStar
 
 import Debug.Trace
 
-main :: IO ()
-main = do
-  [desc] <- getArgs
-  descBs <- C8.readFile desc
-  let Right (prob, state0) = AP.parseOnly initialParser descBs
-  hSetBuffering stdout NoBuffering
-  gen <- MWC.create
-  go gen prob state0
-  putStrLn ""
-  where
-    go gen prob st
-      | allWrapped st = putStrLn ""
-      | otherwise = do
-          foo <- randomBoundedDfs gen prob (\st' -> do (acts, st'') <- boundedBfs gen 50 prob st'; return (remainingTiles st'', length acts, negate (HS.size (st' ^. beaconLocations)), negate $ sum (st' ^. collectedBoosters), remainingTiles st')) 1 st
-          case foo of
-            (xs@(x Seq.:<| _), st', finSco)
-              | x /= DoNothing && view _2 finSco < remainingTiles st -> do
-                  traceShowM $ (concat $ serialize <$> xs, remainingTiles st', finSco)
-                  putStr $ serialize x
-                  go gen prob (either (error "impossible") id $ step prob st x)
-              | otherwise -> case bfs False prob st of -- If doing greedy dfs doesn't give anything good, just do regular bfs
-                  [] -> error "bad greedy"
-                  acts -> do
-                    let st' = foldl' (fmap (either (error "oops9") id) . step prob) st acts
-                    forM_ acts $ \act -> putStr $ serialize act
-                    traceShowM ("greedy", length acts)
-                    go gen prob st'
---   go state0 undefin
+-- main :: IO ()
+-- main = do
+--   [desc] <- getArgs
+--   descBs <- C8.readFile desc
+--   let Right (prob, state0) = AP.parseOnly initialParser descBs
+--   hSetBuffering stdout NoBuffering
+--   gen <- MWC.create
+--   go gen prob state0
+--   putStrLn ""
+--   where
+--     go gen prob st
+--       | allWrapped st = putStrLn ""
+--       | otherwise = do
+--           foo <- randomBoundedDfs gen prob (\st' -> do (acts, st'') <- boundedBfs gen 50 prob st'; return (remainingTiles st'', length acts, negate (HS.size (st' ^. beaconLocations)), negate $ sum (st' ^. collectedBoosters), remainingTiles st')) 1 st
+--           case foo of
+--             (xs@(x Seq.:<| _), st', finSco)
+--               | x /= DoNothing && view _2 finSco < remainingTiles st -> do
+--                   traceShowM $ (concat $ serialize <$> xs, remainingTiles st', finSco)
+--                   putStr $ serialize x
+--                   go gen prob (either (error "impossible") id $ step prob st x)
+--               | otherwise -> case bfs False prob st of -- If doing greedy dfs doesn't give anything good, just do regular bfs
+--                   [] -> error "bad greedy"
+--                   acts -> do
+--                     let st' = foldl' (fmap (either (error "oops9") id) . step prob) st acts
+--                     forM_ acts $ \act -> putStr $ serialize act
+--                     traceShowM ("greedy", length acts)
+--                     go gen prob st'
+-- --   go state0 undefin
