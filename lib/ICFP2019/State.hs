@@ -33,6 +33,7 @@ data Booster
   | Drill
   | Teleport
   | Mysterious
+  | Clone
   deriving (Show, Eq, Ord, Generic)
 
 instance Hashable Booster
@@ -44,7 +45,7 @@ data MineProblem = MineProblem
 makeLenses ''MineProblem
 
 -- INVARIANT: wrapped and blocked and unwrapped should be mutually exclusive, and their union should be `Shape.toHashSet boundary`
-data MineState = MineState
+data OneWorkerState = OneWorkerState
   { _wwPosition :: !Point
   , _wwOrientation :: !Int
   , _wwManipulators :: !(HashSet RelPos)
@@ -58,9 +59,31 @@ data MineState = MineState
   , _beaconLocations :: !(HashSet Point)
   } deriving (Show, Eq, Ord, Generic)
 
-instance Hashable MineState
+instance Hashable OneWorkerState
 
-makeLenses ''MineState
+makeLenses ''OneWorkerState
+
+data WorkerState = WorkerState
+  { _wPosition :: !Point
+  , _wOrientation :: !Int
+  , _wManipulators :: !(HashSet RelPos)
+  , _wActiveFastWheels :: !TimeRemaining
+  , _wActiveDrill :: !TimeRemaining
+  } deriving (Show, Eq, Ord, Generic)
+
+makeLenses ''WorkerState
+
+data FullState = FullState
+  { _fWorkers :: !(HashMap Int WorkerState)
+  , _fUnwrapped :: !(HashSet Point)
+  , _fBlocked :: !(HashSet Point)
+  , _fBoosters :: !(HashMap Point Booster)
+  , _fCollectedBoosters :: !(HashMap Booster Int)
+  , _fTimeSpent :: !Int
+  , _fBeaconLocations :: !(HashSet Point)
+  } deriving (Show, Eq, Ord, Generic)
+
+makeLenses ''FullState
 
 data ActionException
   = NoBooster
@@ -69,7 +92,54 @@ data ActionException
   | InvalidShift
   deriving (Show)
 
-initialParser :: AP.Parser (MineProblem, MineState)
+makeOneWorker :: WorkerState -> FullState -> OneWorkerState 
+makeOneWorker worker full =
+  OneWorkerState
+    { _wwPosition = worker ^. wPosition
+    , _wwOrientation = worker ^. wOrientation
+    , _wwManipulators = worker ^. wManipulators
+    , _unwrapped = full ^. fUnwrapped
+    , _blocked = full ^. fBlocked 
+    , _boosters = full ^. fBoosters 
+    , _collectedBoosters = full ^. fCollectedBoosters
+    , _activeFastWheels = worker ^. wActiveFastWheels
+    , _activeDrill = worker ^. wActiveDrill 
+    , _timeSpent = full ^. fTimeSpent 
+    , _beaconLocations = full ^. fBeaconLocations 
+    }
+
+selectWorker :: FullState -> Int -> Maybe OneWorkerState
+selectWorker fullState workerIndex = fmap (\w -> makeOneWorker w fullState) $ workerstate
+  where
+    workerstate :: Maybe WorkerState
+    workerstate = HM.lookup workerIndex (fullState ^. fWorkers)
+
+updateFullState :: Int -> OneWorkerState -> FullState -> FullState
+updateFullState workerIndex oneworkerstate fullstate =
+  fullstate 
+  & fUnwrapped .~ oneworkerstate ^. unwrapped
+  & fBlocked .~ oneworkerstate ^. blocked
+  & fBoosters .~ oneworkerstate ^. boosters
+  & fCollectedBoosters .~ oneworkerstate ^. collectedBoosters
+  & fTimeSpent .~ oneworkerstate ^. timeSpent
+  & fBeaconLocations .~ oneworkerstate ^. beaconLocations
+  & fWorkers %~ HM.insert workerIndex worker
+  where 
+    worker = WorkerState
+      { _wPosition = oneworkerstate ^. wwPosition 
+      , _wOrientation = oneworkerstate ^. wwOrientation 
+      , _wManipulators = oneworkerstate ^. wwManipulators 
+      , _wActiveFastWheels = oneworkerstate ^. activeFastWheels 
+      , _wActiveDrill = oneworkerstate ^. activeDrill 
+      }
+
+updateFullStateWith :: (OneWorkerState -> OneWorkerState) -> FullState -> Int -> Maybe FullState
+updateFullStateWith f fullstate workerIndex = case selectWorker fullstate workerIndex of
+  Nothing -> Nothing
+  Just result -> 
+      Just $ updateFullState workerIndex result fullstate
+     
+initialParser :: AP.Parser (MineProblem, FullState)
 initialParser = do
     boundary0 <- shapeParser
     _ <- AP.char '#'
@@ -81,23 +151,26 @@ initialParser = do
     let blok = foldMap Shape.toHashSet walls
     let wrap = mempty
     let mineProb = MineProblem boundary0
-    let initialSt = applyWrapped $ MineState
-          { _wwPosition = wwPos
-          , _wwOrientation = 0
-          , _wwManipulators = startingManip
-          , _unwrapped = HS.difference (HS.difference (allTiles boundary0) wrap) blok
-          , _blocked = blok
-          , _boosters = HM.fromList boos
-          , _collectedBoosters = mempty
-          , _activeFastWheels = 0
-          , _activeDrill = 0
-          , _timeSpent = 0
-          , _beaconLocations = mempty
+    let initialWorker = WorkerState
+          { _wPosition = wwPos
+          , _wOrientation = 0
+          , _wManipulators = startingManip
+          , _wActiveFastWheels = 0
+          , _wActiveDrill = 0
           }
+    let fullSt = FullState
+          { _fWorkers = HM.singleton 0 initialWorker
+          , _fUnwrapped = HS.difference (HS.difference (allTiles boundary0) wrap) blok
+          , _fBlocked = blok
+          , _fBoosters = HM.fromList boos
+          , _fCollectedBoosters = mempty
+          , _fTimeSpent = 0
+          , _fBeaconLocations = mempty
+          }
+    let initialSt = maybe fullSt id (updateFullStateWith applyWrapped fullSt 0) 
     return (mineProb, initialSt)
   where
     allTiles sha = Shape.toHashSet sha
-
     startingManip = HS.fromList [V2 0 0, V2 1 0, V2 1 1, V2 1 (-1)]
     boosterParser = do
       whichBooster <- AP.char 'B' *> pure Extension
@@ -118,12 +191,12 @@ initialParser = do
       _ <- AP.char ')'
       return $ V2 x y
 
-validNewManipulatorPositions :: MineState -> HashSet Point
+validNewManipulatorPositions :: OneWorkerState -> HashSet Point
 validNewManipulatorPositions state0 = HS.unions [HS.map ((+) dir) $ state0 ^. wwManipulators | dir <- dirs] `HS.difference` (state0 ^. wwManipulators)
   where
     dirs = [V2 0 1, V2 0 (-1), V2 1 0, V2 (-1) 0]
 
-step :: MineProblem -> MineState -> Action -> Either ActionException MineState
+step :: MineProblem -> OneWorkerState -> Action -> Either ActionException OneWorkerState
 step prob state0 act = case act of
   DoNothing -> pure $ tickTime state0
   MoveUp -> doMove (V2 0 1)
@@ -176,7 +249,7 @@ step prob state0 act = case act of
             Just state2 -> return $ tickTime state2
         else return $ tickTime state1
 
-passable :: MineProblem -> Point -> MineState -> Bool
+passable :: MineProblem -> Point -> OneWorkerState -> Bool
 passable prob pt state0 = inMine prob pt && (notWall || hasDrill)
   where
     hasDrill = state0 ^. activeDrill > 0
@@ -185,16 +258,16 @@ passable prob pt state0 = inMine prob pt && (notWall || hasDrill)
 inMine :: MineProblem -> Point -> Bool
 inMine prob pt = pt `Shape.member` (prob ^. boundary)
 
-open :: MineProblem -> MineState -> Point -> Bool
+open :: MineProblem -> OneWorkerState -> Point -> Bool
 open prob state0 pt = inMine && notWall
   where
     inMine = pt `Shape.member` (prob ^. boundary)
     notWall = not $ HS.member pt (view blocked state0)
 
-notWrapped :: MineState -> Point -> Bool
+notWrapped :: OneWorkerState -> Point -> Bool
 notWrapped state0 pt = HS.member pt (state0 ^. unwrapped)-- open prob state0 pt && not (HS.member pt (state0 ^. wrapped))
 
-movePosition :: RelPos -> MineProblem -> MineState -> Maybe MineState
+movePosition :: RelPos -> MineProblem -> OneWorkerState -> Maybe OneWorkerState
 movePosition rp prob state0 =
   if passable prob pt state0
     then Just $ movePosition' rp state0
@@ -202,7 +275,7 @@ movePosition rp prob state0 =
   where
     pt = rp + state0 ^. wwPosition
 
-movePosition' :: RelPos -> MineState -> MineState
+movePosition' :: RelPos -> OneWorkerState -> OneWorkerState
 movePosition' rp state0 =
   getBooster pt $
       applyWrapped $ state0
@@ -212,39 +285,39 @@ movePosition' rp state0 =
   where
     pt = rp + state0 ^. wwPosition
 
-applyWrapped :: MineState -> MineState
+applyWrapped :: OneWorkerState -> OneWorkerState
 applyWrapped state0 = state0
   & unwrapped %~ (kill diff)
   where
     diff = HS.filter (notWrapped state0) $ HS.map (+ state0 ^. wwPosition) $ state0 ^. wwManipulators -- TODO: We need to check line of sight here
     kill victims uw = foldl' (flip HS.delete) uw victims
 
-allWrapped :: MineState -> Bool
-allWrapped = HS.null . view unwrapped
+allWrapped :: FullState -> Bool
+allWrapped = HS.null . view fUnwrapped
 
-remainingTiles :: MineState -> Int
+remainingTiles :: OneWorkerState -> Int
 remainingTiles state0 = HS.size (state0 ^. unwrapped)
 
 numTiles :: MineProblem -> Int
 numTiles = VU.length . VU.filter id . view (boundary . Shape.points)
 
-missingTiles :: MineState -> HashSet Point
+missingTiles :: OneWorkerState -> HashSet Point
 missingTiles = view unwrapped
 
-getBooster :: Point -> MineState -> MineState
+getBooster :: Point -> OneWorkerState -> OneWorkerState
 getBooster pt state0 = case HM.lookup pt $ state0 ^. boosters of
   Nothing -> state0
   Just b -> state0
     & boosters %~ HM.delete pt
     & collectedBoosters %~ HM.insertWith (+) b 1
 
-tickTime :: MineState -> MineState
+tickTime :: OneWorkerState -> OneWorkerState
 tickTime state0 = state0
   & activeFastWheels %~ max 0 . subtract 1
   & activeDrill %~ max 0 . subtract 1
   & timeSpent %~ (+) 1
 
-interestingActions :: MineProblem -> MineState -> [Action]
+interestingActions :: MineProblem -> OneWorkerState -> [Action]
 interestingActions prob state0 = concat
   [ if passable prob (state0 ^. wwPosition + V2 (-1) 0) state0 then [MoveLeft] else []
   , if passable prob (state0 ^. wwPosition + V2 1 0) state0 then [MoveRight] else []
@@ -259,3 +332,35 @@ interestingActions prob state0 = concat
   , [Shift loc | loc <- HS.toList (state0 ^. beaconLocations)]
   , [DoNothing]
   ]
+
+interestingActionsAll :: MineProblem -> FullState -> HashMap Int [Action]
+interestingActionsAll prob state0 =
+  HM.mapWithKey (\k v -> getActions k) (state0 ^. fWorkers)
+  where
+    getActions :: Int -> [Action]
+    getActions i = case selectWorker state0 i of
+      Nothing -> []
+      Just oneWorkerState -> interestingActions prob oneWorkerState 
+
+stepSingleWorker :: MineProblem -> FullState -> Int -> Action -> Either ActionException FullState
+stepSingleWorker prob fullState workerIndex action = case selectWorker fullState workerIndex of
+  Nothing -> Right fullState
+  Just oneWorkerState -> case step prob oneWorkerState action of
+    Left error -> Left error
+    Right oneWorkerState1 -> Right (updateFullState workerIndex oneWorkerState1 fullState)
+  
+stepAllWorkers :: 
+  MineProblem -> 
+  FullState -> 
+  HashMap Int [Action] -> 
+  Either ActionException (FullState, HashMap Int [Action]) 
+stepAllWorkers prob state0 actions =
+  HM.foldlWithKey' (\accum workerIndex actions -> case accum of 
+    Left error -> Left error
+    Right (state0, remaining_actions) -> case actions of
+      DoClone : _ -> Left InvalidShift
+      action : rest -> case stepSingleWorker prob state0 workerIndex action of
+        Left error -> Left error
+        Right state1 -> Right (state1, HM.insert workerIndex rest remaining_actions))
+    (Right (state0, HM.empty))
+    actions
