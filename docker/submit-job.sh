@@ -1,19 +1,20 @@
 #!/bin/bash
 set -o errexit -o pipefail -o nounset
 
-if [[ $# -lt 1 ]]; then
-    echo "Usage: $0 JOB_NAME" 1>&2
+if [[ $# -lt 2 ]]; then
+    echo "Usage: $0 SOLVER JOB_NAME" 1>&2
     exit 1
 fi
 
-JOB_NAME=$1
-SOL_BUCKET_NAME="icfp2019-sol-$JOB_NAME"
+SOLVER=$1
+JOB_NAME=$2
+SOLUTION_BUCKET="icfp2019-sol-$JOB_NAME"
 
 AWS_ACCOUNT_ID="$(aws sts get-caller-identity --output text --query 'Account')"
 
 # Create an S3 bucket for the results.
-echo "Creating bucket $SOL_BUCKET_NAME..." 1>&2
-aws s3api create-bucket --bucket "$SOL_BUCKET_NAME"
+echo "Creating bucket $SOLUTION_BUCKET..." 1>&2
+aws s3api create-bucket --bucket "$SOLUTION_BUCKET"
 
 # Update the job definition
 echo "Updating job definition..." 1>&2
@@ -28,9 +29,13 @@ cat - >"$JOB_DEFINITION_JSON" <<EOF
     "memory": 7000,
     "environment": [
       {
-        "name": "SOL_BUCKET_NAME",
-        "value": "$SOL_BUCKET_NAME"
-      }
+        "name": "ICFP2019_SOLUTION_BUCKET",
+        "value": "$SOLUTION_BUCKET"
+      },
+      {
+        "name": "ICFP2019_SOLVER",
+        "value": "$SOLVER"
+    }
     ]
   }
 }
