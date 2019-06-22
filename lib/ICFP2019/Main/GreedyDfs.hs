@@ -31,7 +31,7 @@ main = do
     go gen prob st
       | allWrapped st = putStrLn ""
       | otherwise = do
-          foo <- randomBoundedDfs gen prob (\st' -> do (acts, st'') <- boundedBfs gen 100 prob st'; return (remainingTiles st'', length acts, negate (HS.size (st' ^. beaconLocations)), negate $ sum (st' ^. collectedBoosters), remainingTiles st')) 1 st
+          foo <- randomBoundedDfs gen prob (\st' -> do (acts, st'') <- boundedBfs gen 50 prob st'; return (remainingTiles st'', length acts, negate (HS.size (st' ^. beaconLocations)), negate $ sum (st' ^. collectedBoosters), remainingTiles st')) 1 st
           case foo of
             (xs@(x Seq.:<| _), st', finSco)
               | x /= DoNothing && view _2 finSco < remainingTiles st -> do

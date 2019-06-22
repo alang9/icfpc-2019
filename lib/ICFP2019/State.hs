@@ -177,11 +177,13 @@ step prob state0 act = case act of
         else return $ tickTime state1
 
 passable :: MineProblem -> Point -> MineState -> Bool
-passable prob pt state0 = inMine && (notWall || hasDrill)
+passable prob pt state0 = inMine prob pt && (notWall || hasDrill)
   where
     hasDrill = state0 ^. activeDrill > 0
-    inMine = pt `Shape.member` (prob ^. boundary)
     notWall = not $ HS.member pt (view blocked state0)
+
+inMine :: MineProblem -> Point -> Bool
+inMine prob pt = pt `Shape.member` (prob ^. boundary)
 
 open :: MineProblem -> MineState -> Point -> Bool
 open prob state0 pt = inMine && notWall

@@ -65,17 +65,19 @@ randomBfs :: forall m. (PrimMonad m) => Gen (PrimState m) -> MineProblem -> Mine
 randomBfs gen prob state0 = do
   states <- Data.Graph.AStar.aStarM (neighbours . snd) (\_ _ -> pure 1)
     (pure . heuristicDistance . snd)
-    (\(_, (pos, _)) -> pure $ or [HS.member (pos + offset) (state0 ^. unwrapped) | offset <- manips]) (pure (DoNothing, (state0 ^. wwPosition, state0 ^. activeFastWheels)))
+    (\(_, (pos, _, _)) -> pure $ or [HS.member (pos + offset) (state0 ^. unwrapped) | offset <- manips])
+    (pure (DoNothing, (state0 ^. wwPosition, state0 ^. activeFastWheels, state0 ^. activeDrill)))
   return $ maybe [] (map fst) states
   where
     manips = HS.toList $ state0 ^. wwManipulators
-    neighbours :: (Point, Int) -> m (HS.HashSet (Action, (Point, Int)))
-    neighbours (pos, fw) = do
+    neighbours :: (Point, Int, Int) -> m (HS.HashSet (Action, (Point, Int, Int)))
+    neighbours (pos, fw, ad) = do
       res <- uniformShuffle restricted gen
       let fw' = max 0 $ fw - 1
+      let ad' = max 0 $ ad - 1
       return $ HS.fromList
-        [ if fw > 0 && open prob state0 (pos + d + d) then (m, (pos + d + d, fw')) else (m, (pos + d, fw'))
-        | (m, d) <- VB.toList res, open prob state0 (pos + d)] -- the fast wheels approximation is not quite right
+        [ if fw > 0 && (open prob state0 (pos + d + d) || (inMine prob (pos + d + d) && ad > 0)) then (m, (pos + d + d, fw', ad')) else (m, (pos + d, fw', ad'))
+        | (m, d) <- VB.toList res, open prob state0 (pos + d) || (inMine prob (pos + d) && ad > 0)]
     restricted = VB.fromList
       [ (MoveLeft, V2 (-1) 0)
       , (MoveRight, V2 1 0)
@@ -92,8 +94,8 @@ boundedBfs gen turns prob st
       [] -> error "bounded bad greedy"
       acts
         | length acts >= turns -> do
-            let st' = foldl' (fmap (either (error "oops") id) . step prob) st acts
+            let st' = foldl' (fmap (either (error "oops1") id) . step prob) st acts
             return (Seq.fromList acts, st')
         | otherwise -> do
-            let st' = foldl' (fmap (either (error "oops") id) . step prob) st acts
+            let st' = foldl' (\oldSt act -> either (\ex -> error $ "oops2 " ++ show (ex, act, acts, st ^. wwPosition, oldSt ^. wwPosition)) id $ step prob oldSt act) st acts
             boundedBfs gen (turns - length acts) prob st' <&> _1 %~ (Seq.fromList acts <>)
