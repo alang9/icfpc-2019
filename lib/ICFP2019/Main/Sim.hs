@@ -2,12 +2,15 @@ module ICFP2019.Main.Sim
     ( main
     ) where
 
+import Control.Lens
 import qualified Data.Attoparsec.ByteString as AP
 import qualified Data.ByteString.Char8 as C8
 import System.Environment
 
 import ICFP2019.State
 import ICFP2019.Action
+
+import Debug.Trace
 
 main :: IO ()
 main = do
@@ -30,4 +33,6 @@ main = do
             AP.Partial _ -> error "unexpected partial"
             AP.Done remain act -> case step prob state0 act of
               Left exc -> error $ "sim exception: " ++ show exc
-              Right state1 -> go prob (n + 1) state1 remain
+              Right state1 -> do
+                traceShowM (state1 ^. wwPosition, act, state1^. activeFastWheels)
+                go prob (n + 1) state1 remain

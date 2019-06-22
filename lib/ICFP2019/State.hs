@@ -63,6 +63,7 @@ makeLenses ''MineState
 data ActionException
   = NoBooster
   | CantAttachManipulator
+  | NoSpace
   deriving (Show)
 
 initialParser :: AP.Parser (MineProblem, MineState)
@@ -120,26 +121,26 @@ validNewManipulatorPositions state0 = HS.unions [HS.map ((+) dir) $ state0 ^. ww
 step :: MineProblem -> MineState -> Action -> Either ActionException MineState
 step prob state0 act = case act of
   DoNothing -> pure $ tickTime state0
-  MoveUp -> pure $ doMove (V2 0 1)
-  MoveDown -> pure $ doMove (V2 0 (-1))
-  MoveLeft -> pure $ doMove (V2 (-1) 0)
-  MoveRight -> pure $ doMove (V2 1 0)
-  TurnCW -> pure $ tickTime $ movePosition (V2 0 0) prob $ state0
+  MoveUp -> doMove (V2 0 1)
+  MoveDown -> doMove (V2 0 (-1))
+  MoveLeft -> doMove (V2 (-1) 0)
+  MoveRight -> doMove (V2 1 0)
+  TurnCW -> pure $ tickTime $ movePosition' (V2 0 0) $ state0
     & wwManipulators %~ HS.map (\(V2 x y) -> V2 y (-x))
     & wwOrientation %~ mod 4 . succ
   TurnCCW ->
-    pure $ tickTime $ movePosition (V2 0 0) prob $ state0
+    pure $ tickTime $ movePosition' (V2 0 0) $ state0
     & wwManipulators %~ HS.map (\(V2 x y) -> V2 (-y) x)
     & wwOrientation %~ mod 4 . pred
   AttachFastWheels -> if HM.lookupDefault 0 FastWheels (state0 ^. collectedBoosters) > 0
-    then Right $ tickTime $ state0
-      & activeFastWheels %~ max 50
-      & collectedBoosters %~ HM.adjust pred FastWheels
+    then Right $ (tickTime $ state0
+      & collectedBoosters %~ HM.adjust pred FastWheels)
+      & activeFastWheels %~ (+) 50
     else Left NoBooster
   AttachDrill -> if HM.lookupDefault 0 Drill (state0 ^. collectedBoosters) > 0
-    then Right $ tickTime $ state0
-      & activeDrill %~ max 30
-      & collectedBoosters %~ HM.adjust pred Drill
+    then Right $ tickTime $ (state0
+      & collectedBoosters %~ HM.adjust pred Drill)
+      & activeDrill %~ (+) 30
     else Left NoBooster
   AttachManipulator rp -> if HM.lookupDefault 0 Extension (state0 ^. collectedBoosters) > 0
     then
@@ -151,10 +152,14 @@ step prob state0 act = case act of
         else Left CantAttachManipulator
     else Left NoBooster
   where
-    doMove rp =
+    doMove rp = maybe (Left NoSpace) Right $ do
+      state1 <- movePosition rp prob state0
       if state0 ^. activeFastWheels > 0
-        then tickTime $ movePosition rp prob $ movePosition rp prob state0
-        else tickTime $ movePosition rp prob state0
+        then do
+          case movePosition rp prob state1 of
+            Nothing -> return $ tickTime state1
+            Just state2 -> return $ tickTime state2
+        else return $ tickTime state1
 
 passable :: MineProblem -> Point -> MineState -> Bool
 passable prob pt state0 = inMine && (notWall || hasDrill)
@@ -172,15 +177,21 @@ open prob state0 pt = inMine && notWall
 notWrapped :: MineState -> Point -> Bool
 notWrapped state0 pt = HS.member pt (state0 ^. unwrapped)-- open prob state0 pt && not (HS.member pt (state0 ^. wrapped))
 
-movePosition :: RelPos -> MineProblem -> MineState -> MineState
+movePosition :: RelPos -> MineProblem -> MineState -> Maybe MineState
 movePosition rp prob state0 =
   if passable prob pt state0
-    then getBooster pt $
+    then Just $ movePosition' rp state0
+    else Nothing
+  where
+    pt = rp + state0 ^. wwPosition
+
+movePosition' :: RelPos -> MineState -> MineState
+movePosition' rp state0 =
+  getBooster pt $
       applyWrapped $ state0
             & wwPosition .~ pt
             & blocked %~ HS.delete pt
             & unwrapped %~ HS.insert pt
-    else state0
   where
     pt = rp + state0 ^. wwPosition
 
@@ -227,4 +238,5 @@ interestingActions prob state0 = concat
   , if maybe False (> 0) $ HM.lookup FastWheels (state0 ^. collectedBoosters) then [AttachFastWheels] else []
   , if maybe False (> 0) $ HM.lookup Drill (state0 ^. collectedBoosters) then [AttachDrill] else []
   , if maybe False (> 0) $ HM.lookup Extension (state0 ^. collectedBoosters) then [AttachManipulator pt | pt <- HS.toList (validNewManipulatorPositions state0), notWrapped state0 pt ] else []
+  , [DoNothing]
   ]

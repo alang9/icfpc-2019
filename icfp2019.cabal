@@ -29,6 +29,7 @@ Library
     ICFP2019.DFS
     ICFP2019.Main.Dfs
     ICFP2019.Main.Greedy
+    ICFP2019.Main.GreedyDfs
     ICFP2019.Main.Sim
     ICFP2019.Main.V0
     ICFP2019.Shape
@@ -47,7 +48,8 @@ Library
     astar,
     vector,
     vector-instances,
-    primitive
+    primitive,
+    mwc-random
 
 Common exe
   Default-language: Haskell2010
@@ -70,3 +72,7 @@ Executable dfs
 Executable greedy
   Import:  exe
   Main-is: Greedy.hs
+
+Executable greedy-dfs
+  Import:  exe
+  Main-is: GreedyDfs.hs

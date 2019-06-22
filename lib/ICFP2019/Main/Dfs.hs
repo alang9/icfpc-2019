@@ -24,7 +24,7 @@ main = do
       | otherwise = do
           foo <- boundedDfs prob (\st -> pure (remainingTiles st, costHeuristic st)) 7 st
           case foo of
-            (x Seq.:<| _, _) -> do
+            (x Seq.:<| _, _, _) -> do
               putStr $ serialize x
               go prob (either (error "impossible") id $ step prob st x)
 --   go state0 undefin
