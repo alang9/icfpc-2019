@@ -18,21 +18,21 @@ main = do
   descBs <- C8.readFile desc
   let Right (prob, state0) = AP.parseOnly initialParser descBs
   actionBs <- C8.readFile sols
-  go prob 0 state0 actionBs
+  parsedActions <- case AP.parse parseAllActions actionBs of
+    f@(AP.Fail _ _ _) -> error "parsing failed" 
+    AP.Partial _ -> error "unexpected partial"
+    AP.Done remain actions -> actions 
+  go prob 0 state0 parsedActions
   where
-    go :: MineProblem -> Int -> MineState -> C8.ByteString -> IO ()
-    go prob n state0 actionBs = do
+    go :: MineProblem -> Int -> FullState -> C8.ByteString -> IO ()
+    go prob n state0 parsedActions = do
       if allWrapped state0
         then do
           putStrLn $ "Completed after " ++ show n ++ " steps"
-          putStrLn $ "Remaining actions: " ++ show actionBs
+          putStrLn $ "Remaining actions: " ++ show parsedActions
           putStrLn $ "Misssing tiles: " ++ show (missingTiles state0)
         else
-          case AP.parse parseAction actionBs of
-            f@(AP.Fail _ _ _) -> error $ show (f, n, state0, actionBs, missingTiles state0)
-            AP.Partial _ -> error "unexpected partial"
-            AP.Done remain act -> case step prob state0 act of
+          case stepAllWorkers prob state0 act of
               Left exc -> error $ "sim exception: " ++ show exc
-              Right state1 -> do
-                traceShowM (state1 ^. wwPosition, act, state1^. activeFastWheels)
-                go prob (n + 1) state1 remain
+              Right (state1, act1) -> do
+                go prob (n + 1) state1 act1
