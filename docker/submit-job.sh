@@ -25,7 +25,7 @@ cat - >"$JOB_DEFINITION_JSON" <<EOF
   "containerProperties": {
     "image": "$AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/icfp2019-runner",
     "vcpus": 2,
-    "memory": 8000,
+    "memory": 7000,
     "environment": [
       {
         "name": "SOL_BUCKET_NAME",
