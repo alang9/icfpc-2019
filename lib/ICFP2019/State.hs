@@ -368,13 +368,13 @@ doClone prob fullState workerIndex = case selectWorker fullState workerIndex of
   Nothing -> Right Nothing 
   Just oneWorkerState -> case HM.lookup (oneWorkerState ^. wwPosition) (oneWorkerState ^. boosters) of
     Just Mysterious -> 
-      Right $ Just (WorkerState
+      Right $ Just $ WorkerState
           { _wPosition = oneWorkerState ^. wwPosition
           , _wOrientation = oneWorkerState ^. wwOrientation
           , _wManipulators = startingManip
           , _wActiveFastWheels = 0
           , _wActiveDrill = 0
-          })
+          }
     _ -> Left InvalidCloneLocation
   
 addWorker :: FullState -> WorkerState -> FullState
@@ -391,6 +391,7 @@ stepAllWorkers ::
 stepAllWorkers prob state0 actions = fmap (\(state1, newWorkers, actions) -> 
   (tickTimeAll $ addWorkers newWorkers state1, actions)) result
   where
+    result :: Either ActionException (FullState, [WorkerState], HashMap Int [Action])
     result = foldl' (\accum (workerIndex, actions) -> case accum of 
       Left error -> Left error
       Right (state0, newWorkers, remainingActions) -> case actions of
