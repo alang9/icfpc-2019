@@ -11,6 +11,7 @@ import Control.Lens
 import Data.Hashable
 import qualified Data.HashSet as HS
 import qualified Data.Graph.AStar
+import Data.List
 import Linear hiding (trace)
 import qualified Data.HashMap.Lazy as HM
 import Data.HashMap.Lazy (HashMap)
@@ -57,9 +58,11 @@ truncateActions actions =
     minCount :: Int
     minCount = foldl1' min $ fmap length $ HM.elems actions 
 
+sortedFoldl' f acc0 workers = foldl' (\acc (wid, ws) -> f acc wid ws) acc0 $ sort $ HM.toList workers
+
 bfsMultipleWorkers :: (OneWorkerState -> ([Action], Maybe Point)) -> FullState -> HM.HashMap Int [Action]
 bfsMultipleWorkers ourBfs state0 =
-  snd $ HM.foldlWithKey' getPath (state0, HM.empty) workers 
+  snd $ sortedFoldl' getPath (state0, HM.empty) workers 
   where 
     workers = state0 ^. fWorkers 
     getPath :: (FullState, HM.HashMap Int [Action]) -> Int -> WorkerState -> (FullState, HM.HashMap Int [Action])
@@ -76,7 +79,7 @@ bfsMultipleWorkers ourBfs state0 =
 bfsMultipleWorkers' :: (HS.HashSet Point -> OneWorkerState -> ([Action], Maybe Point)) -> FullState ->
     HM.HashMap Int [Action] -> HS.HashSet Point -> (HM.HashMap Int [Action], HS.HashSet Point)
 bfsMultipleWorkers' ourBfs state0 actionQueue alreadyPlanned =
-  HM.foldlWithKey' getPath (actionQueue, alreadyPlanned) $ workers
+  sortedFoldl' getPath (actionQueue, alreadyPlanned) $ workers
   where
     workers = state0 ^. fWorkers 
     getPath :: (HM.HashMap Int [Action], HS.HashSet Point) -> Int -> WorkerState -> (HM.HashMap Int [Action], HS.HashSet Point)

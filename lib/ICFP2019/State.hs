@@ -258,6 +258,12 @@ step prob state0 act = case act of
             Just state2 -> return $ state2
         else return $ state1
 
+stepAndTick :: MineProblem -> OneWorkerState -> Action -> Either ActionException OneWorkerState
+stepAndTick prob state act = step prob state act
+  <&> timeSpent %~ succ
+  <&> activeDrill %~ max 0 . pred
+  <&> activeFastWheels %~ max 0 . pred
+
 passable :: MineProblem -> Point -> OneWorkerState -> Bool
 passable prob pt state0 = inMine prob pt && (notWall || hasDrill)
   where
@@ -356,7 +362,7 @@ interestingActions prob state0 = concat
   , case HM.lookup (state0 ^. wwPosition) (state0 ^. boosters) of
       Just Mysterious -> if maybe False (> 0) $ HM.lookup Clone (state0 ^. collectedBoosters) then [DoClone] else []
       _ -> []
-  , [DoNothing]
+--  , [DoNothing]
   ]
 
 interestingActionsAll :: MineProblem -> FullState -> HashMap Int [Action]
