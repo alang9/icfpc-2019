@@ -31,7 +31,7 @@ data MHeap s k a = MHeap
   { mhSize :: {-# UNPACK #-} !(MBA s)
   , mhKeys :: !(UM.MVector s k)
   , mhVals :: !(UM.MVector s a)
-  }
+  } 
 
 -- | Create an empty heap of capacity @cap@.
 newMH :: (UM.Unbox k, UM.Unbox a) => Int -> ST s (MHeap s k a)

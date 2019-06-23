@@ -59,7 +59,8 @@ Library
     vector-instances,
     primitive,
     mwc-random,
-    psqueues
+    psqueues,
+    vector-th-unbox
 
 Test-suite icfp2019-tests
   Hs-source-dirs:   tests

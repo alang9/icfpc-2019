@@ -4,6 +4,10 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module ICFP2019.AStar where
 
@@ -21,6 +25,11 @@ import Data.List (foldl', foldl1')
 import Data.OrdPSQ (OrdPSQ)
 import qualified Data.OrdPSQ as PSQ
 import GHC.Generics (Generic)
+import qualified MHeap as MH
+import Control.Monad.ST
+import qualified Data.Vector.Unboxed.Mutable as UM
+import Control.Monad (foldM)
+import Data.Vector.Unboxed.Deriving (derivingUnbox)
 
 import ICFP2019.State
 import ICFP2019.Action
@@ -209,6 +218,13 @@ data BfsState = BfsState
 
 instance Hashable BfsState
 
+derivingUnbox "BfsState"
+    [t| BfsState -> (Action, Point, Int, Int, Int) |]
+    [| \BfsState {bsAction=act,bsPos=pos,bsOrient=orient,bsActiveFastWheels=fw,bsActiveDrill=d} -> 
+          (act,pos,orient,fw,d) |]
+    [|\(act,pos,orient,fw,d) -> 
+          BfsState {bsAction=act,bsPos=pos,bsOrient=orient,bsActiveFastWheels=fw,bsActiveDrill=d} |]
+
 data AStarX a c v = AStarX { visited  :: !(HashSet a),
                          waiting  :: !(OrdPSQ a c v),
                          score    :: !(HashMap a c),
@@ -217,6 +233,7 @@ data AStarX a c v = AStarX { visited  :: !(HashSet a),
                          end      :: !(Maybe (a, v)) }
     deriving Show
 
+aStarXInit :: (Eq a, Hashable a, Eq v, Hashable v, Num c) => a -> v -> AStarX a c v
 aStarXInit start val = AStarX { visited  = mempty,
                           waiting  = PSQ.singleton start 0 val,
                           score    = HM.singleton start 0,
@@ -281,7 +298,13 @@ aStarX graph dist heur goal start val
             Nothing -> Nothing
             Just e  -> Just (reverse . takeWhile (not . (== (start, val))) . iterate (cameFrom s HM.!) $ e)
 
-invalidatingBfs :: Bool -> Int -> MineProblem -> PlannedCoverage -> OneWorkerState -> Maybe [(Action, [Point])]
+invalidatingBfs :: 
+  Bool 
+  -> Int 
+  -> MineProblem 
+  -> PlannedCoverage 
+  -> OneWorkerState 
+  -> Maybe [(Action, [Point])]
 invalidatingBfs allowTurns respect prob plannedCov state0 = do
   states <- aStarX neighbours
     (\_ s2 -> V3 1 (if HM.member (bsPos $ fst s2) (state0 ^. boosters) then -1 else 0) (negate $ length $ newCover s2))
@@ -290,6 +313,152 @@ invalidatingBfs allowTurns respect prob plannedCov state0 = do
     initialState
     (state0 ^. timeSpent)
   return $ map (\s -> (bsAction (fst s), newCover s)) states
+  where
+    newCover (BfsState {bsPos, bsOrient}, gen) =
+      [ pos
+      | offset <- manips' bsOrient
+      , let pos = bsPos + offset
+      , let line = map (+ bsPos) $ LineOfSight.lineOfSight offset
+      , all (open prob state0) line
+      , HS.member pos (state0 ^. unwrapped)
+      , maybe True (\(_, gen') -> gen < gen' - respect) $ HM.lookup pos plannedCov
+      ]
+    initialState = BfsState DoNothing (state0 ^. wwPosition) (state0 ^. wwOrientation) (state0 ^. activeFastWheels) (state0 ^. activeDrill)
+    manips = HS.toList $ state0 ^. wwManipulators
+    manips' orient = case mod (orient - state0 ^. wwOrientation) 4 of
+      0 -> manips0
+      1 -> manips1
+      2 -> manips2
+      3 -> manips3
+    rot (V2 x y) = V2 y (-x)
+    (!manips0):(!manips1):(!manips2):(!manips3):_ = iterate (map rot) $ manips
+    neighbours :: (BfsState, Int) -> HS.HashSet (BfsState, Int)
+    neighbours (BfsState {..}, gen) = HS.fromList $
+      [ if fw > 0 && (open prob state0 (bsPos + d + d) || (inMine prob (bsPos + d + d) && ad > 0))
+          then (BfsState m (bsPos + d + d) bsOrient fw' ad', gen + 1)
+          else (BfsState m (bsPos + d) bsOrient fw' ad', gen + 1)
+      | (m, d) <- moves, open prob state0 (bsPos + d) || (inMine prob (bsPos + d) && ad > 0)
+      ] ++
+      if allowTurns
+        then
+          [ (BfsState m bsPos (mod (bsOrient + d) 4) fw' ad', gen + 1)
+          | (m, d) <- turns
+          ]
+        else []
+      where
+        ad = bsActiveDrill
+        fw = bsActiveFastWheels
+        fw' = max 0 $ fw - 1
+        ad' = max 0 $ ad - 1
+    moves =
+      [ (MoveLeft, V2 (-1) 0)
+      , (MoveRight, V2 1 0)
+      , (MoveUp, V2 0 1)
+      , (MoveDown, V2 0 (-1))
+      ]
+    turns =
+      [ (TurnCW, 1)
+      , (TurnCCW, -1)
+      ]
+    heuristicDistance :: BfsState -> V3 Int
+    heuristicDistance _ = V3 0 0 0
+
+
+data AStarXHeap s a c v = AStarXHeap { hVisited  :: !(HashSet a),
+                         hWaiting  :: !(MH.MHeap s c (a,v)),
+                         hScore    :: !(HashMap a c),
+                         hMemoHeur :: !(HashMap a c),
+                         hCameFrom :: !(HashMap (a, v) (a, v)),
+                         hEnd      :: !(Maybe (a, v)) }
+
+aStarXInitHeap :: (UM.Unbox c, UM.Unbox a, UM.Unbox v, Ord c, Num c, Eq a, Hashable a, Eq v, Hashable v) => 
+  MH.MHeap s c (a,v) -> a -> v -> ST s (AStarXHeap s a c v)
+aStarXInitHeap mHeap start val = do
+    MH.clearMH mHeap 
+    MH.insertMH mHeap 0 (start, val) 
+    return $ AStarXHeap { hVisited  = mempty,
+                          hWaiting  = mHeap, 
+                          hScore    = HM.singleton start 0,
+                          hMemoHeur = mempty,
+                          hCameFrom = mempty,
+                          hEnd      = Nothing }
+
+runAStarXHeap :: forall a c v s. (UM.Unbox c, UM.Unbox a, UM.Unbox v, Ord c, Num c, Eq a, Hashable a, Eq v, Hashable v) 
+         => ((a, v) -> HashSet (a, v))     -- adjacencies in graph
+         -> ((a, v) -> (a, v) -> c)        -- distance function
+         -> (a -> c)                       -- heuristic distance to goal
+         -> ((a, v) -> Bool)               -- goal
+         -> a                              -- starting vertex
+         -> v
+         -> MH.MHeap s c (a,v)             -- reusing heap - it will be cleared
+         -> ST s (AStarXHeap s a c v)      -- final state
+runAStarXHeap graph dist heur goal start val oldHeap = do
+  s <- aStarXInitHeap oldHeap start val
+  aStar' s
+  where
+    aStar' :: AStarXHeap s a c v -> ST s (AStarXHeap s a c v)
+    aStar' s
+      = do
+        minElt <- MH.deleteMH (hWaiting s)
+        case minElt of
+          Nothing -> return s
+          Just (_, (x,v)) -> 
+            if goal (x, v)
+              then return $ s { hEnd = Just (x, v) }
+                  else foldM (expand (x, v))
+                         (s { hVisited = HS.insert x (hVisited s)})
+                         [neigh | neigh <- HS.toList (graph (x, v)), not (HS.member (fst neigh) (hVisited s))]
+                       >>= aStar'
+
+    expand :: (a, v) -> AStarXHeap s a c v -> (a, v) -> ST s (AStarXHeap s a c v)
+    expand (xa, xv) s (ya, yv) 
+      = let v = hScore s HM.! xa + dist (xa, xv) (ya, yv) in
+            link (xa, xv) (ya, yv) v (s { hMemoHeur = HM.insert ya (heur ya) (hMemoHeur s) })
+    link :: (a, v) -> (a, v) -> c -> AStarXHeap s a c v -> ST s (AStarXHeap s a c v)
+    link (xa, xv) (ya, yv) v s = do
+        MH.insertMH (hWaiting s) (v + hMemoHeur s HM.! ya) (ya, yv)
+        return $ s { hCameFrom = HM.insert (ya, yv) (xa, xv) (hCameFrom s),
+                     hScore    = HM.insert ya v (hScore s) }
+            
+aStarXHeap :: (UM.Unbox c, UM.Unbox a, UM.Unbox v, Ord c, Num c, Eq a, Hashable a, Eq v, Hashable v) =>
+  ((a, v) -> HashSet (a, v))     -- ^ The graph we are searching through, given as a function from vertices
+                                 -- to their neighbours.
+  -> ((a, v) -> (a, v) -> c) -- ^ Distance function between neighbouring vertices of the graph. This will
+                             -- never be applied to vertices that are not neighbours, so may be undefined
+                             -- on pairs that are not neighbours in the graph.
+  -> (a -> c)      -- ^ Heuristic distance to the (nearest) goal. This should never overestimate the
+                   -- distance, or else the path found may not be minimal.
+  -> ((a, v) -> Bool)   -- ^ The goal, specified as a boolean predicate on vertices.
+  -> a             -- ^ The vertex to start searching from.
+  -> v
+  -> MH.MHeap s c (a,v)        -- reusing old heap 
+  -> ST s (Maybe [(a, v)])     -- ^ An optimal path, if any path exists. This excludes the starting vertex.
+aStarXHeap graph dist heur goal start val oldHeap
+    = do
+      s <- runAStarXHeap graph dist heur goal start val oldHeap
+      case hEnd s of
+            Nothing -> return $ Nothing
+            Just e  -> return $ Just (reverse . takeWhile (not . (== (start, val))) . iterate (hCameFrom s HM.!) $ e)
+
+invalidatingBfsHeap :: 
+  Bool 
+  -> Int 
+  -> MineProblem 
+  -> PlannedCoverage 
+  -> OneWorkerState 
+  -> MH.MHeap s (V3 Int) (BfsState, Int) 
+  -> ST s (Maybe [(Action, [Point])])
+invalidatingBfsHeap allowTurns respect prob plannedCov state0 oldHeap = do
+  maybeStates <- aStarXHeap neighbours
+    (\_ s2 -> V3 1 (if HM.member (bsPos $ fst s2) (state0 ^. boosters) then -1 else 0) (negate $ length $ newCover s2))
+    heuristicDistance
+    (\s -> length (newCover s) > 0)
+    initialState
+    (state0 ^. timeSpent)
+    oldHeap
+  case maybeStates of
+    Nothing -> return Nothing
+    Just states -> return $ Just $ map (\s -> (bsAction (fst s), newCover s)) states
   where
     newCover (BfsState {bsPos, bsOrient}, gen) =
       [ pos

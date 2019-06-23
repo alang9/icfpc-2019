@@ -1,4 +1,8 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module ICFP2019.Action where
 
@@ -9,6 +13,7 @@ import Linear
 import qualified Data.HashMap.Lazy as HM
 import Data.List (foldl', sort, intercalate)
 import Data.HashMap.Lazy (HashMap)
+import Data.Vector.Unboxed.Deriving (derivingUnbox)
 
 data Action
   = MoveUp
@@ -27,6 +32,37 @@ data Action
   deriving (Show, Generic, Ord, Eq)
 
 instance Hashable Action
+
+derivingUnbox "Action"
+    [t| Action -> (Int, V2 Int) |]
+    [| \a -> case a of
+              MoveUp -> (0, V2 0 0 )
+              MoveDown -> (1,V2 0 0)
+              MoveLeft -> (2,V2 0 0)
+              MoveRight -> (3,V2 0 0)
+              DoNothing -> (4,V2 0 0) 
+              TurnCW -> (5,V2 0 0) 
+              TurnCCW -> (6,V2 0 0) 
+              AttachManipulator v -> (7, v)
+              AttachFastWheels -> (8,V2 0 0)
+              AttachDrill -> (9,V2 0 0) 
+              Reset -> (10, V2 0 0) 
+              Shift v -> (11, v)
+              DoClone -> (12, V2 0 0) |]
+    [| \(i,v) -> case i of
+              0  ->  MoveUp
+              1  ->  MoveDown
+              2  ->  MoveLeft
+              3  ->  MoveRight
+              4  ->  DoNothing
+              5  ->  TurnCW
+              6  ->  TurnCCW
+              7  ->  AttachManipulator v 
+              8  ->  AttachFastWheels
+              9  ->  AttachDrill
+              10 ->  Reset
+              11 ->  Shift v 
+              other  ->  DoClone |]
 
 parseAction :: AP.Parser Action
 parseAction = AP.choice
