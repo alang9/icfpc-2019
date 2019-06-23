@@ -17,6 +17,13 @@ AWS_ACCOUNT_ID="$(aws sts get-caller-identity --output text --query 'Account')"
 echo "Creating bucket $SOLUTION_BUCKET..." 1>&2
 aws s3api create-bucket --bucket "$SOLUTION_BUCKET"
 
+# Obtain balance, buy boosters and upload buys to solution directory.
+BALANCE="$(docker run --env ICFP2019_PRIVATE_KEY=foo --env ICFP2019_PUBLIC_KEY=149 icfp2019-balance)"
+echo "Buying boosters for $BALANCE..." 1>&2
+BOOSTER_BUY_DIR="$(mktemp -d)"
+stack exec buyer "$BALANCE" "$BOOSTER_BUY_DIR"
+aws s3 sync "$BOOSTER_BUY_DIR" "s3://$SOLUTION_BUCKET"
+
 # Update the job definition
 echo "Updating job definition..." 1>&2
 JOB_DEFINITION_JSON="$(mktemp)"
