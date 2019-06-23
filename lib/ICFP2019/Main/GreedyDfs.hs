@@ -1,22 +1,22 @@
 module ICFP2019.Main.GreedyDfs where
 
-import Control.Lens
-import Control.Monad
-import qualified Data.Attoparsec.ByteString as AP
-import qualified Data.ByteString.Char8 as C8
-import qualified Data.HashSet as HS
-import Data.List
-import qualified Data.Sequence as Seq
-import System.Environment
-import System.IO
-import qualified System.Random.MWC as MWC
+-- import Control.Lens
+-- import Control.Monad
+-- import qualified Data.Attoparsec.ByteString as AP
+-- import qualified Data.ByteString.Char8 as C8
+-- import qualified Data.HashSet as HS
+-- import Data.List
+-- import qualified Data.Sequence as Seq
+-- import System.Environment
+-- import System.IO
+-- import qualified System.Random.MWC as MWC
 
-import ICFP2019.State
-import ICFP2019.Action
-import ICFP2019.DFS
-import ICFP2019.AStar
+-- import ICFP2019.State
+-- import ICFP2019.Action
+-- import ICFP2019.DFS
+-- import ICFP2019.AStar
 
-import Debug.Trace
+-- import Debug.Trace
 
 -- main :: IO ()
 -- main = do
@@ -31,10 +31,16 @@ import Debug.Trace
 --     go gen prob st
 --       | allWrapped st = putStrLn ""
 --       | otherwise = do
---           foo <- randomBoundedDfs gen prob (\st' -> do (acts, st'') <- boundedBfs gen 50 prob st'; return (remainingTiles st'', length acts, negate (HS.size (st' ^. beaconLocations)), negate $ st' ^. totalBoosters, remainingTiles st')) 1 st
+--           let scoreFunction st' = do
+--                 (acts, st'') <- boundedBfs gen 50 prob st'
+--                 let tileDiff = remainingTiles st'' - remainingTiles st
+--                 let timeDiff = st'' ^. timeSpent - st ^. timeSpent
+--                 return (tileDiff, timeDiff, negate (HS.size (st' ^. beaconLocations)), negate $ st' ^. totalBoosters, remainingTiles st')
+--           noMoveSco <- scoreFunction st
+--           foo <- randomBoundedDfs gen prob scoreFunction 1 st
 --           case foo of
 --             (xs@(x Seq.:<| _), st', finSco)
---               | x /= DoNothing && view _2 finSco < remainingTiles st -> do
+--               | x /= DoNothing && finSco < noMoveSco -> do
 --                   traceShowM $ (concat $ serialize <$> xs, remainingTiles st', finSco)
 --                   putStr $ serialize x
 --                   go gen prob (either (error "impossible") id $ step prob st x)
@@ -43,6 +49,6 @@ import Debug.Trace
 --                   acts -> do
 --                     let st' = foldl' (fmap (either (error "oops9") id) . step prob) st acts
 --                     forM_ acts $ \act -> putStr $ serialize act
---                     traceShowM ("greedy", length acts, x, view _2 finSco, remainingTiles st)
+--                     traceShowM ("greedy", length acts, x, view _1 finSco, remainingTiles st)
 --                     go gen prob st'
 -- --   go state0 undefin

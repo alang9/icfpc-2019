@@ -19,19 +19,19 @@ module ICFP2019.DFS where
 -- import Linear
 -- import qualified System.Random.MWC.Distributions as MWC
 -- import System.Random.MWC
--- 
+
 -- import ICFP2019.Action
 -- import ICFP2019.State
--- 
+
 -- import Debug.Trace
--- 
+
 -- dfsOneStep :: MineProblem -> MineState -> [(Action, MineState)]
 -- dfsOneStep prob state0 = mapMaybe go $ interestingActions prob state0
 --   where
 --     go act = case step prob state0 act of
 --       Left ex -> error $ "dfsOneStep: " ++ show ex
 --       Right state1 -> Just (act, state1)
--- 
+
 -- boundedDfs :: forall m a. (Monad m, Ord a, Show a) => MineProblem -> (MineState -> m a) -> Int -> MineState -> m (Seq Action, MineState, a)
 -- boundedDfs prob fitness maxDepth initial = do
 --   fitnessInitial <- fitness initial
@@ -54,7 +54,7 @@ module ICFP2019.DFS where
 --           xs' <- mapM (\(act, st') -> (_1 %~ (act Seq.:<|)) <$> go initialFit (remDepth - 1) st') xs
 --           return $ minimumBy (comparing $ \(_, _, score) -> score) xs'
 --   -- fitness' a = (\b -> (b, costHeuristic a)) <$> fitness a
--- 
+
 -- randomBoundedDfs :: forall m a. (PrimMonad m, Ord a, Show a) => Gen (PrimState m) -> MineProblem -> (MineState -> m a) -> Int -> MineState -> m (Seq Action, MineState, a)
 -- randomBoundedDfs gen prob fitness maxDepth initial = do
 --   fitnessInitial <- fitness initial
@@ -75,11 +75,11 @@ module ICFP2019.DFS where
 --           !fit <- fitness st
 --           return (mempty, st, fit)
 --         xs@(_:_) -> do
---           -- when (remDepth == maxDepth) $ traceShowM ("top", map fst xs)
 --           xs' <- mapM (\(act, st') -> go initialFit (remDepth - 1) st' (acts Seq.:|> act)) xs
+--           when (remDepth == maxDepth) $ traceShowM ("top", map (\(a, _, sco) -> (a, sco)) xs')
 --           return $ minimumBy (comparing $ \(_, _, score) -> score) xs'
 --   -- fitness' a = (\b -> (b, costHeuristic a)) <$> fitness a
--- 
+
 -- randomDfsOneStep :: (PrimMonad m) => Gen (PrimState m) -> MineProblem -> MineState -> m [(Action, MineState)]
 -- randomDfsOneStep gen prob state0 = VB.toList <$> MWC.uniformShuffle choices gen
 --   where
@@ -87,7 +87,7 @@ module ICFP2019.DFS where
 --     go act = case step prob state0 act of
 --       Left ex -> error $ "dfsOneStep: " ++ show ex
 --       Right state1 -> Just (act, state1)
--- 
+
 -- costHeuristic :: MineState -> Int
 -- costHeuristic state0 = case map go $ HS.toList $ missingTiles state0 of
 --     [] -> 0
