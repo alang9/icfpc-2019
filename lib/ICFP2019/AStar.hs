@@ -283,7 +283,7 @@ aStarX graph dist heur goal start val
 invalidatingBfs :: Bool -> Int -> MineProblem -> PlannedCoverage -> OneWorkerState -> Maybe [(Action, [Point])]
 invalidatingBfs allowTurns respect prob plannedCov state0 = do
   states <- aStarX neighbours
-    (\_ s2 -> V2 1 (negate $ length $ newCover s2))
+    (\_ s2 -> V3 1 (if HM.member (bsPos $ fst s2) (state0 ^. boosters) then -1 else 0) (negate $ length $ newCover s2))
     heuristicDistance
     (\s -> length (newCover s) > 0)
     initialState
@@ -334,44 +334,5 @@ invalidatingBfs allowTurns respect prob plannedCov state0 = do
       [ (TurnCW, 1)
       , (TurnCCW, -1)
       ]
-    heuristicDistance :: BfsState -> V2 Int
-    heuristicDistance _ = V2 0 0
--- randomBfs :: forall m. (PrimMonad m) => Gen (PrimState m) -> MineProblem -> MineState -> m [Action]
--- randomBfs gen prob state0 = do
---   states <- Data.Graph.AStar.aStarM (neighbours . snd) (\_ _ -> pure 1)
---     (pure . heuristicDistance . snd)
---     (\(_, (pos, _, _)) -> pure $ or [HS.member (pos + offset) (state0 ^. unwrapped) | offset <- manips])
---     (pure (DoNothing, (state0 ^. wwPosition, state0 ^. activeFastWheels, state0 ^. activeDrill)))
---   -- traceShowM (map snd <$> states)
---   return $ maybe [] (map fst) states
---   where
---     manips = HS.toList $ state0 ^. wwManipulators
---     neighbours :: (Point, Int, Int) -> m (HS.HashSet (Action, (Point, Int, Int)))
---     neighbours (pos, fw, ad) = do
---       res <- uniformShuffle restricted gen
---       let fw' = max 0 $ fw - 1
---       let ad' = max 0 $ ad - 1
---       return $ HS.fromList
---         [ if fw > 0 && (open prob state0 (pos + d + d) || (inMine prob (pos + d + d) && ad > 0)) then (m, (pos + d + d, fw', ad')) else (m, (pos + d, fw', ad'))
---         | (m, d) <- VB.toList res, open prob state0 (pos + d) || (inMine prob (pos + d) && ad > 0)]
---     restricted = VB.fromList
---       [ (MoveLeft, V2 (-1) 0)
---       , (MoveRight, V2 1 0)
---       , (MoveUp, V2 0 1)
---       , (MoveDown, V2 0 (-1))
---       ]
---     heuristicDistance :: a -> Int
---     heuristicDistance _ = 0
--- 
--- boundedBfs :: forall m. (PrimMonad m) => Gen (PrimState m) -> Int -> MineProblem -> MineState -> m (Seq Action, MineState)
--- boundedBfs gen turns prob st
---   | allWrapped st || turns <= 0 = pure (mempty, st)
---   | otherwise = randomBfs gen prob st >>= \case
---       [] -> error "bounded bad greedy"
---       acts
---         | length acts >= turns -> do
---             let st' = foldl' (fmap (either (error "oops1") id) . step prob) st acts
---             return (Seq.fromList acts, st')
---         | otherwise -> do
---             let (st', acceptedActs) = foldl' (\(oldSt, acc) act -> case step prob oldSt act of Left ex -> traceShow ("error", ex) (oldSt, acc); Right newSt -> (newSt, act:acc) ) (st, []) acts
---             boundedBfs gen (turns - length acceptedActs) prob st' <&> _1 %~ (Seq.fromList (reverse acceptedActs) <>)
+    heuristicDistance :: BfsState -> V3 Int
+    heuristicDistance _ = V3 0 0 0

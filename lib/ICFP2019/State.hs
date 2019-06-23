@@ -206,7 +206,7 @@ validNewManipulatorPositions state0 = HS.unions [HS.map ((+) dir) $ state0 ^. ww
     dirs = [V2 0 1, V2 0 (-1), V2 1 0, V2 (-1) 0]
 
 step :: MineProblem -> OneWorkerState -> Action -> Either ActionException OneWorkerState
-step prob state0 act = case act of
+step prob preState0 act = case act of
   DoNothing -> pure $ state0
   MoveUp -> doMove (V2 0 1)
   MoveDown -> doMove (V2 0 (-1))
@@ -249,6 +249,7 @@ step prob state0 act = case act of
       Right $ applyWrapped prob $ state0 & wwPosition .~ pos
     else Left InvalidShift
   where
+    state0 = getBooster (preState0 ^. wwPosition) preState0
     doMove rp = maybe (Left NoSpace) Right $ do
       state1 <- movePosition rp prob state0
       if state0 ^. activeFastWheels > 0
@@ -292,7 +293,7 @@ movePosition rp prob state0 =
 
 movePosition' :: RelPos -> MineProblem -> OneWorkerState -> OneWorkerState
 movePosition' rp prob state0 =
-  getBooster pt $
+  -- getBooster pt $
       applyWrapped prob $ state0
             & wwPosition .~ pt
             & blocked %~ HS.delete pt
@@ -356,7 +357,10 @@ interestingActions prob state0 = concat
   , [TurnCCW]
   , if maybe False (> 0) $ HM.lookup FastWheels (state0 ^. collectedBoosters) then [AttachFastWheels] else []
   , if maybe False (> 0) $ HM.lookup Drill (state0 ^. collectedBoosters) then [AttachDrill] else []
-  , if maybe False (> 0) $ HM.lookup Teleport (state0 ^. collectedBoosters) then [Reset] else []
+  , if maybe False (> 0) (HM.lookup Teleport (state0 ^. collectedBoosters))
+        && (HM.lookup (state0 ^. wwPosition) (state0 ^. boosters) /= Just Mysterious)
+      then [Reset]
+      else []
   , if maybe False (> 0) $ HM.lookup Extension (state0 ^. collectedBoosters) then [AttachManipulator pt | pt <- HS.toList (validNewManipulatorPositions state0), notWrapped state0 pt ] else []
   , [Shift loc | loc <- HS.toList (state0 ^. beaconLocations)]
   , case HM.lookup (state0 ^. wwPosition) (state0 ^. boosters) of

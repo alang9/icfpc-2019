@@ -18,6 +18,7 @@ import Debug.Trace
 printState :: IO.Handle -> FullState -> HM.HashMap Int [Action] -> IO ()
 printState h state actions = do
   IO.hPrint h $ length $ state ^. fUnwrapped
+  IO.hPrint h $ state ^. fCollectedBoosters
   IO.hPrint h nextActions
   IO.hPrint h workers
   where
