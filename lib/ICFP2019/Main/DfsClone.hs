@@ -38,7 +38,7 @@ runSteps prob !st actionsDone actionQueue plannedCoverage
       -- let st' = if missingActions st immediateActions
       --           then error $ "bad greedy 5: " ++ show immediateActions
       --           else either (\exc -> error $ "oops 12 " ++ show exc) id $ stepAllWorkers' prob st immediateActions
-      traceShowM ("f", HS.size $ finalSt ^. fUnwrapped, immediateActions, HM.map length newQueue)
+      traceShowM ("f", HS.size $ finalSt ^. fUnwrapped, immediateActions, HM.map length newQueue, finalSt ^. fCollectedBoosters)
       runSteps prob finalSt (appendActions actionsDone immediateActions) newQueue newPlannedCoverage
 
 missingActions :: FullState -> HM.HashMap WorkerId Action -> Bool
@@ -98,6 +98,7 @@ boundedInvalidatingBfs stoppingDepth allowTurns respect prob cov initialSt = go 
   where
     go depth st = case invalidatingBfs allowTurns respect prob cov st of
       Nothing -> Nothing
+      Just [] -> error "what"
       Just path
         | length path >= depth -> Just path
         | otherwise -> Just $ path ++ nextPaths

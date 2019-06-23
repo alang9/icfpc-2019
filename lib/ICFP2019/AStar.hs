@@ -24,6 +24,7 @@ import GHC.Generics (Generic)
 
 import ICFP2019.State
 import ICFP2019.Action
+import qualified ICFP2019.LineOfSight as LineOfSight
 
 import Debug.Trace
 
@@ -154,7 +155,7 @@ bfs allowTurns prob excluded state0 = maybe ([], Nothing) id $ do
     (\(_, ((pos, orient), _, _)) ->
        or [HS.member (pos + offset) (state0 ^. unwrapped) && not (HS.member (pos + offset) excluded) | offset <- manips' orient])
     (DoNothing, ((state0 ^. wwPosition, state0 ^. wwOrientation), state0 ^. activeFastWheels, state0 ^. activeDrill))
-  let actions = map fst states 
+  let actions = map fst states
   let target = fmap (\(_action, ((finalPos,_),_,_)) -> finalPos) $ safeLast states
   return (actions, target)
   where
@@ -294,6 +295,8 @@ invalidatingBfs allowTurns respect prob plannedCov state0 = do
       [ pos
       | offset <- manips' bsOrient
       , let pos = bsPos + offset
+      , let line = map (+ bsPos) $ LineOfSight.lineOfSight offset
+      , all (open prob state0) line
       , HS.member pos (state0 ^. unwrapped)
       , maybe True (\(_, gen') -> gen < gen' - respect) $ HM.lookup pos plannedCov
       ]

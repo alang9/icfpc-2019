@@ -40,7 +40,8 @@ boundedDfs prob descend maxDepth initial =
     initialFitness = maybe 0 fitness $ descend initial
     go remDepth st
       | remDepth <= 0 = descend st
-      | otherwise = if fitness best > 0 then Just best else Nothing
+      | otherwise =
+            if fitness best > 0 then Just best else Nothing
           where
             best = maximumBy (comparing fitness) options
             neighbours = dfsOneStep prob st

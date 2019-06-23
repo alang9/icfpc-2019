@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE LambdaCase #-}
@@ -201,8 +202,20 @@ buyBoosters bb s = s
     & fCollectedBoosters %~ (unBoosterBag . (<> bb) . BoosterBag)
 
 validNewManipulatorPositions :: OneWorkerState -> HashSet Point
-validNewManipulatorPositions state0 = HS.unions [HS.map ((+) dir) $ state0 ^. wwManipulators | dir <- dirs] `HS.difference` (state0 ^. wwManipulators)
+validNewManipulatorPositions state0 =
+    HS.filter (\newM -> maxRange (HS.insert newM (state0^.wwManipulators)) > oldRange) $
+    HS.unions [HS.map ((+) dir) $ state0 ^. wwManipulators | dir <- dirs] `HS.difference` (state0 ^. wwManipulators)
   where
+    oldRange :: Int
+    oldRange = maxRange $ state0 ^. wwManipulators
+    maxRange :: HashSet Point -> Int
+    maxRange manip = max yRange xRange
+      where
+        xs = [m ^. _x | m <- HS.toList manip]
+        ys = [m ^. _y | m <- HS.toList manip]
+        xRange, yRange :: Int
+        xRange = maximum xs - minimum xs
+        yRange = maximum ys - minimum ys
     dirs = [V2 0 1, V2 0 (-1), V2 1 0, V2 (-1) 0]
 
 step :: MineProblem -> OneWorkerState -> Action -> Either ActionException OneWorkerState
@@ -361,7 +374,8 @@ interestingActions prob state0 = concat
         && (HM.lookup (state0 ^. wwPosition) (state0 ^. boosters) /= Just Mysterious)
       then [Reset]
       else []
-  , if maybe False (> 0) $ HM.lookup Extension (state0 ^. collectedBoosters) then [AttachManipulator pt | pt <- HS.toList (validNewManipulatorPositions state0), notWrapped state0 pt ] else []
+  , if maybe False (> 0) $ HM.lookup Extension (state0 ^. collectedBoosters) then
+      [AttachManipulator pt | pt <- HS.toList (validNewManipulatorPositions state0)] else []
   , [Shift loc | loc <- HS.toList (state0 ^. beaconLocations)]
   , case HM.lookup (state0 ^. wwPosition) (state0 ^. boosters) of
       Just Mysterious -> if maybe False (> 0) $ HM.lookup Clone (state0 ^. collectedBoosters) then [DoClone] else []
