@@ -222,12 +222,12 @@ step prob state0 act = case act of
   AttachFastWheels -> if HM.lookupDefault 0 FastWheels (state0 ^. collectedBoosters) > 0
     then Right $ (state0
       & collectedBoosters %~ HM.adjust pred FastWheels)
-      & activeFastWheels %~ (+) 50
+      & activeFastWheels %~ (+) 51 -- 51 instead of 50 because we will advance the time after this move, but not use them
     else Left NoBooster
   AttachDrill -> if HM.lookupDefault 0 Drill (state0 ^. collectedBoosters) > 0
     then Right $ (state0
       & collectedBoosters %~ HM.adjust pred Drill)
-      & activeDrill %~ (+) 30
+      & activeDrill %~ (+) 31 -- 31 instead of 30 becauce we will advance the time after this move, but not use them
     else Left NoBooster
   AttachManipulator rp -> if HM.lookupDefault 0 Extension (state0 ^. collectedBoosters) > 0
     then
