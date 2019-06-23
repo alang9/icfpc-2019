@@ -40,6 +40,15 @@ boosterFromCode = prism' toCode fromCode
         Teleport   -> 'R'
         Clone      -> 'C'
 
+boosterCost :: Booster -> Int
+boosterCost = \case
+  Extension  -> 1000
+  FastWheels -> 300
+  Drill      -> 700
+  Teleport   -> 1200
+  Mysterious -> 0
+  Clone      -> 2000
+
 newtype BoosterBag = BoosterBag {unBoosterBag :: HMS.HashMap Booster Int}
 
 instance Semigroup BoosterBag where
@@ -48,6 +57,9 @@ instance Semigroup BoosterBag where
 instance Monoid BoosterBag where
     mempty  = BoosterBag HMS.empty
     mappend = (<>)
+
+singletonBoosterBag :: Booster -> BoosterBag
+singletonBoosterBag c = BoosterBag (HMS.singleton c 1)
 
 parseBoosterBag :: String -> Maybe BoosterBag
 parseBoosterBag =

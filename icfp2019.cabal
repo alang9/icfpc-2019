@@ -50,6 +50,7 @@ Library
     linear,
     attoparsec,
     bytestring,
+    filepath,
     hashable,
     lens,
     containers,
@@ -117,4 +118,4 @@ Executable coin-puzzle
 
 Executable buyer
   Import:  exe
-  Main-is: CoinPuzzle.hs
+  Main-is: Buyer.hs
