@@ -24,7 +24,7 @@ runSteps :: MineProblem -> FullState -> HM.HashMap Int [Action] -> HM.HashMap In
 runSteps prob !st actionsDone actionQueue alreadyPlanned
   | allWrapped st = pure (actionsDone, st ^. fTimeSpent)
   | otherwise = do
-      let (actions, newPlanned) = bfsMultipleWorkers' (bfs False prob) st actionQueue alreadyPlanned
+      let (actions, newPlanned) = bfsMultipleWorkers' (bfs True prob) st actionQueue alreadyPlanned
       let (st', performedActions, remainingActions) = if actionsAreMissing st actions
                 then error $ "bad greedy 5: " ++ show actions
                 else either (error "oops") id $ stepUntilFinished' prob st mempty actions

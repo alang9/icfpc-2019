@@ -417,6 +417,32 @@ stepAllWorkers prob state0 actions = fmap (\(state1, newWorkers, performed, acti
     addWorkers newWorkers state =
       foldl' addWorker state newWorkers 
 
+stepAllWorkers' ::
+  MineProblem ->
+  FullState ->
+  HashMap Int Action ->
+  Either ActionException FullState
+stepAllWorkers' prob state0 actions = fmap tickTimeAll result
+  where
+    result :: Either ActionException FullState
+    result = foldl' (\accum (workerIndex, action) -> case accum of
+      Left error -> Left error
+      Right state0 -> case action of
+        DoClone -> case doClone prob state0 workerIndex of
+          Left error -> Left error
+          Right (Just newWorker) -> Right $ state0
+            & fCollectedBoosters %~ HM.adjust pred Clone
+            & fWorkers %~ HM.insert index newWorker
+            where
+              index = length (state0 ^. fWorkers)
+          Right Nothing -> Right state0
+        action -> case stepSingleWorker prob state0 workerIndex action of
+          Left error -> Left error
+          Right Nothing -> Right state0
+          Right (Just state1) -> Right state1)
+      (Right state0)
+      (sort $ HM.toList actions)
+
 actionsAreMissing :: FullState -> HM.HashMap Int [Action] -> Bool
 actionsAreMissing state actions =
   foldl' checkNonemptyActions False (HM.keys $ state ^. fWorkers)

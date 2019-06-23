@@ -32,6 +32,7 @@ Library
     ICFP2019.Main.Dfs
     ICFP2019.Main.Greedy
     ICFP2019.Main.GreedyClone
+    ICFP2019.Main.DfsClone
     ICFP2019.Main.GreedyDfs
     ICFP2019.Main.Sim
     ICFP2019.Main.V0
@@ -54,7 +55,8 @@ Library
     vector,
     vector-instances,
     primitive,
-    mwc-random
+    mwc-random,
+    psqueues
 
 Test-suite icfp2019-tests
   Hs-source-dirs:   tests
@@ -102,6 +104,10 @@ Executable greedy-dfs
 Executable greedy-clone
   Import:  exe
   Main-is: GreedyClone.hs
+
+Executable dfs-clone
+  Import:  exe
+  Main-is: DfsClone.hs
 
 Executable coin-puzzle
   Import:  exe
