@@ -22,6 +22,7 @@ import qualified Data.Sequence as Seq
 import Debug.Trace (trace, traceShow, traceShowM)
 
 import qualified ICFP2019.Shape as Shape
+import qualified ICFP2019.LineOfSight as LineOfSight
 import ICFP2019.Shape (Shape)
 import ICFP2019.Action
 
@@ -180,7 +181,7 @@ initialParser = do
           , _fBeaconLocations = mempty
           , _fTotalBoosters = 0
           }
-    let initialSt = maybe (error "should be unreachable") id (updateFullStateWith applyWrapped fullSt 0) 
+    let initialSt = maybe (error "should be unreachable") id (updateFullStateWith (applyWrapped mineProb) fullSt 0) 
     -- traceShowM $ initialSt
     return (mineProb, initialSt)
   where
@@ -217,11 +218,11 @@ step prob state0 act = case act of
   MoveDown -> doMove (V2 0 (-1))
   MoveLeft -> doMove (V2 (-1) 0)
   MoveRight -> doMove (V2 1 0)
-  TurnCW -> pure $ movePosition' (V2 0 0) $ state0
+  TurnCW -> pure $ movePosition' (V2 0 0) prob $ state0
     & wwManipulators %~ HS.map (\(V2 x y) -> V2 y (-x))
     & wwOrientation %~ mod 4 . succ
   TurnCCW ->
-    pure $ movePosition' (V2 0 0) $ state0
+    pure $ movePosition' (V2 0 0) prob $ state0
     & wwManipulators %~ HS.map (\(V2 x y) -> V2 (-y) x)
     & wwOrientation %~ mod 4 . pred
   AttachFastWheels -> if HM.lookupDefault 0 FastWheels (state0 ^. collectedBoosters) > 0
@@ -238,20 +239,20 @@ step prob state0 act = case act of
     then
       if HS.member rp (validNewManipulatorPositions state0)
         then
-          Right $ applyWrapped $ state0
+          Right $ applyWrapped prob $ state0
             & wwManipulators %~ HS.insert rp
             & collectedBoosters %~ HM.adjust pred Extension
         else Left CantAttachManipulator
     else Left NoBooster
   Reset -> if HM.lookupDefault 0 Teleport (state0 ^. collectedBoosters) > 0
     then
-      Right $ applyWrapped $ state0
+      Right $ applyWrapped prob $ state0
             & beaconLocations %~ HS.insert (state0 ^. wwPosition)
             & collectedBoosters %~ HM.adjust pred Teleport
     else Left NoBooster
   Shift pos -> if HS.member pos (state0 ^. beaconLocations)
     then
-      Right $ applyWrapped $ state0 & wwPosition .~ pos
+      Right $ applyWrapped prob $ state0 & wwPosition .~ pos
     else Left InvalidShift
   where
     doMove rp = maybe (Left NoSpace) Right $ do
@@ -284,27 +285,36 @@ notWrapped state0 pt = HS.member pt (state0 ^. unwrapped)-- open prob state0 pt 
 movePosition :: RelPos -> MineProblem -> OneWorkerState -> Maybe OneWorkerState
 movePosition rp prob state0 =
   if passable prob pt state0
-    then Just $ movePosition' rp state0
+    then Just $ movePosition' rp prob state0
     else Nothing
   where
     pt = rp + state0 ^. wwPosition
 
-movePosition' :: RelPos -> OneWorkerState -> OneWorkerState
-movePosition' rp state0 =
+movePosition' :: RelPos -> MineProblem -> OneWorkerState -> OneWorkerState
+movePosition' rp prob state0 =
   getBooster pt $
-      applyWrapped $ state0
+      applyWrapped prob $ state0
             & wwPosition .~ pt
             & blocked %~ HS.delete pt
             & unwrapped %~ HS.insert pt
   where
     pt = rp + state0 ^. wwPosition
 
-applyWrapped :: OneWorkerState -> OneWorkerState
-applyWrapped state0 = state0
+applyWrapped :: MineProblem -> OneWorkerState -> OneWorkerState
+applyWrapped problem state0 = state0
   & unwrapped %~ (kill diff)
   where
-    diff = HS.filter (notWrapped state0) $ HS.map (+ state0 ^. wwPosition) $ state0 ^. wwManipulators -- TODO: We need to check line of sight here
+    diff = HS.filter (notWrapped state0) targets
+    targets = HS.filter (hasLineOfSightTo problem state0) $
+        HS.map (+ state0 ^. wwPosition) $ state0 ^. wwManipulators
+
     kill victims uw = foldl' (flip HS.delete) uw victims
+
+hasLineOfSightTo :: MineProblem -> OneWorkerState -> Point -> Bool
+hasLineOfSightTo problem state target =
+    let delta = target - state ^. wwPosition
+        tiles = map (+ state ^. wwPosition) (LineOfSight.lineOfSight delta) in
+    all (open problem state) tiles
 
 allWrapped :: FullState -> Bool
 allWrapped = HS.null . view fUnwrapped
