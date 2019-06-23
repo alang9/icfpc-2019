@@ -12,6 +12,10 @@ docker run -it \
     icfp2019-builder
 docker rm icfp2019-builder-01
 
+# Build a docker image to get the balance.
+
+docker build -t icfp2019-balance docker/balance
+
 # Build a runner docker image.
 
 docker build -t icfp2019-runner docker/runner
