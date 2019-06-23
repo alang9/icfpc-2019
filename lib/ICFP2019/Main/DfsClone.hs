@@ -32,7 +32,6 @@ runSteps prob !st actionsDone actionQueue plannedCoverage
   | allWrapped st = pure (actionsDone, st ^. fTimeSpent)
   | otherwise = do
       let (immediateActions, newQueue, newPlannedCoverage) = HM.foldlWithKey' (foo prob st) (mempty, actionQueue, plannedCoverage) $ st ^. fWorkers
---      let (actions, newPlanned) = bfsMultipleWorkers' (bfs True prob) st actionQueue alreadyPlanned
       let st' = if missingActions st immediateActions
                 then error $ "bad greedy 5: " ++ show immediateActions
                 else either (error "oops") id $ stepAllWorkers' prob st immediateActions
@@ -60,7 +59,7 @@ foo prob fullState (actionAcc, queueAcc, plannedCoverage) workerId _ = case curr
         (HM.insert workerId act actionAcc, HM.insert workerId remQueue queueAcc, plannedCoverage)
   _ -> trace ("finding new work for: " ++ show workerId) $ case newPlan of
     ((act, _):remQueue) -> pp (HM.insert workerId act actionAcc, HM.insert workerId remQueue cleanedQueueAcc, invalidatedCoverage) -- Maybe remove new invalidate guys from queue and coverage
-    [] -> (HM.insert workerId DoNothing actionAcc, HM.insert workerId [] queueAcc, cleanedCoverage) -- TODO: check cleanedCoverage == invalidatedCoverage
+    [] -> (HM.insert workerId DoNothing actionAcc, HM.insert workerId (replicate 50 (DoNothing, [])) queueAcc, cleanedCoverage) -- TODO: check cleanedCoverage == invalidatedCoverage
   where
     pp = case invalidated of
       [] -> id
@@ -84,7 +83,7 @@ updateCoverage myId gen plan cov0 = foldl' go (cov0, []) $ concat $ zipWith (\g 
       Just (otherId, _) -> (HM.insert pt (myId, thisGen) (HM.filter ((/=) otherId . fst) cov), otherId:invalids)
 
 findPlan :: MineProblem -> PlannedCoverage -> OneWorkerState -> Maybe [(Action, [Point])]
-findPlan = invalidatingBfs False
+findPlan = invalidatingBfs False 0
 
 runStepsClone :: MineProblem -> FullState -> HM.HashMap Int (Seq Action) -> IO (HM.HashMap Int (Seq Action), FullState)
 runStepsClone prob !st actionsDone

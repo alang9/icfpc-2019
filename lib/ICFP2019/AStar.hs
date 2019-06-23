@@ -277,8 +277,8 @@ aStarX graph dist heur goal start val
             Nothing -> Nothing
             Just e  -> Just (reverse . takeWhile (not . (== (start, val))) . iterate (cameFrom s HM.!) $ e)
 
-invalidatingBfs :: Bool -> MineProblem -> PlannedCoverage -> OneWorkerState -> Maybe [(Action, [Point])]
-invalidatingBfs allowTurns prob plannedCov state0 = do
+invalidatingBfs :: Bool -> Int -> MineProblem -> PlannedCoverage -> OneWorkerState -> Maybe [(Action, [Point])]
+invalidatingBfs allowTurns respect prob plannedCov state0 = do
   states <- aStarX neighbours
     (\_ s2 -> V2 1 (negate $ length $ newCover s2))
     heuristicDistance
@@ -292,7 +292,7 @@ invalidatingBfs allowTurns prob plannedCov state0 = do
       | offset <- manips' bsOrient
       , let pos = bsPos + offset
       , HS.member pos (state0 ^. unwrapped)
-      , maybe True (\(_, gen') -> gen < gen') $ HM.lookup pos plannedCov
+      , maybe True (\(_, gen') -> gen < gen' - respect) $ HM.lookup pos plannedCov
       ]
     initialState = BfsState DoNothing (state0 ^. wwPosition) (state0 ^. wwOrientation) (state0 ^. activeFastWheels) (state0 ^. activeDrill)
     manips = HS.toList $ state0 ^. wwManipulators
