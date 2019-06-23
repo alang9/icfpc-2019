@@ -22,7 +22,7 @@ runSteps :: MineProblem -> FullState -> HM.HashMap Int [Action] -> IO (HM.HashMa
 runSteps prob !st actionsDone
   | allWrapped st = pure (actionsDone, st ^. fTimeSpent)
   | otherwise = 
-      let actions = truncateActions $ bfsMultipleWorkers (bfs True prob) st in 
+      let actions = truncateActions $ bfsMultipleWorkers (bfs True prob mempty) st in 
           do
             let st' = if actionsAreMissing st actions 
                       then error "bad greedy" 

@@ -73,6 +73,26 @@ bfsMultipleWorkers ourBfs state0 =
         manips = maybe (error "bfsMultipleWorkers: impossible") id $ workers ^? ix workerIndex . wManipulators
         (newActions, target) = ourBfs (makeOneWorker workerState fullState)
 
+bfsMultipleWorkers' :: (HS.HashSet Point -> OneWorkerState -> ([Action], Maybe Point)) -> FullState ->
+    HM.HashMap Int [Action] -> HS.HashSet Point -> (HM.HashMap Int [Action], HS.HashSet Point)
+bfsMultipleWorkers' ourBfs state0 actionQueue alreadyPlanned =
+  HM.foldlWithKey' getPath (actionQueue, alreadyPlanned) $ workers
+  where
+    workers = state0 ^. fWorkers 
+    getPath :: (HM.HashMap Int [Action], HS.HashSet Point) -> Int -> WorkerState -> (HM.HashMap Int [Action], HS.HashSet Point)
+    -- TODO: pass planned things to ourBfs
+    getPath (actions, planned) workerIndex workerState
+      | HM.lookupDefault [] workerIndex actions == [] =
+          case target of
+            Nothing -> (HM.insert workerIndex (replicate 100 DoNothing) actions, planned)
+            Just target' -> (HM.insert workerIndex newActions actions, HS.union planned $ HS.map ((+) target') manips)
+      | otherwise = (actions, planned)
+      where
+        remove [] hs = hs
+        remove (x:xs) hs = remove xs $ HS.delete x hs
+        manips = maybe (error "bfsMultipleWorkers: impossible") id $ workers ^? ix workerIndex . wManipulators
+        (newActions, target) = ourBfs planned (makeOneWorker workerState state0)
+
 bfsToExactPositions :: [Point] -> Bool -> MineProblem -> OneWorkerState -> ([Action], Maybe Point)
 bfsToExactPositions targets allowTurns prob state0 = maybe ([], Nothing) id $ do
   states <- Data.Graph.AStar.aStar (neighbours . snd)
@@ -122,12 +142,14 @@ bfsToExactPositions targets allowTurns prob state0 = maybe ([], Nothing) id $ do
     heuristicDistance (_, ((pos, _), _, _)) = V2 (minimum [l1 k pos | k <- targets]) 0
     l1 (V2 x y) (V2 x' y') = abs (x - x') + abs (y - y')
 
-bfs :: Bool -> MineProblem -> OneWorkerState -> ([Action], Maybe Point)
-bfs allowTurns prob state0 = maybe ([], Nothing) id $ do
+bfs :: Bool -> MineProblem -> HS.HashSet Point -> OneWorkerState -> ([Action], Maybe Point)
+bfs allowTurns prob excluded state0 = maybe ([], Nothing) id $ do
   states <- Data.Graph.AStar.aStar (neighbours . snd)
-    (\_ (_, ((newPos, newOrient), _, _)) -> V2 1 (negate $ length [ () | offset <- manips' newOrient, HS.member (newPos + offset) (state0 ^. unwrapped)]))
+    (\_ (_, ((newPos, newOrient), _, _)) ->
+       V2 1 (negate $ length [ () | offset <- manips' newOrient, HS.member (newPos + offset) (state0 ^. unwrapped), not (HS.member (newPos + offset) excluded)]))
     (heuristicDistance . snd)
-    (\(_, ((pos, orient), _, _)) -> or [HS.member (pos + offset) (state0 ^. unwrapped) | offset <- manips' orient])
+    (\(_, ((pos, orient), _, _)) ->
+       or [HS.member (pos + offset) (state0 ^. unwrapped) && not (HS.member (pos + offset) excluded) | offset <- manips' orient])
     (DoNothing, ((state0 ^. wwPosition, state0 ^. wwOrientation), state0 ^. activeFastWheels, state0 ^. activeDrill))
   let actions = map fst states 
   let target = fmap (\(_action, ((finalPos,_),_,_)) -> finalPos) $ safeLast states

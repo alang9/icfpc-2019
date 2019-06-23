@@ -3,6 +3,7 @@ module ICFP2019.Main.GreedyClone where
 
 import qualified Data.Attoparsec.ByteString as AP
 import qualified Data.ByteString.Char8 as C8
+import Data.Foldable
 import Data.List
 import System.Environment
 import System.IO
@@ -19,16 +20,16 @@ import Debug.Trace
 combineActions :: HM.HashMap Int [Action] -> HM.HashMap Int [Action] -> HM.HashMap Int [Action]
 combineActions = HM.unionWith (++) 
 
-runSteps :: MineProblem -> FullState -> HM.HashMap Int [Action] -> IO (HM.HashMap Int [Action], Int)
-runSteps prob !st actionsDone
+runSteps :: MineProblem -> FullState -> HM.HashMap Int [Action] -> HM.HashMap Int [Action] -> HS.HashSet Point -> IO (HM.HashMap Int [Action], Int)
+runSteps prob !st actionsDone actionQueue alreadyPlanned
   | allWrapped st = pure (actionsDone, st ^. fTimeSpent)
   | otherwise = do
-      let actions = truncateActions $ bfsMultipleWorkers (bfs False prob) st
-      let st' = if actionsAreMissing st actions 
+      let (actions, newPlanned) = bfsMultipleWorkers' (bfs False prob) st actionQueue alreadyPlanned
+      let (st', performedActions, remainingActions) = if actionsAreMissing st actions
                 then error $ "bad greedy 5: " ++ show actions
-                else either (error "oops") id $ stepUntilFinished prob st actions 
+                else either (error "oops") id $ stepUntilFinished' prob st mempty actions
       traceShowM ("f", HS.size $ st' ^. fUnwrapped, actions)
-      runSteps prob st' (combineActions actionsDone actions)
+      runSteps prob st' (combineActions actionsDone $ HM.map toList performedActions) remainingActions newPlanned
 
 runStepsClone :: MineProblem -> FullState -> HM.HashMap Int [Action] -> IO (HM.HashMap Int [Action], FullState)
 runStepsClone prob !st actionsDone
@@ -68,6 +69,6 @@ main = do
   hSetBuffering stdout NoBuffering
   (actions1, state1) <- runStepsClone prob state0 HM.empty
   traceShowM ("actions1", actions1)
-  (actionsDone, timeSpent) <- runSteps prob state1 actions1
+  (actionsDone, timeSpent) <- runSteps prob state1 actions1 mempty mempty
   putStrLn $ serializeActions actionsDone
   traceShow timeSpent $ putStrLn ""

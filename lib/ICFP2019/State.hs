@@ -17,6 +17,8 @@ import qualified Data.Vector.Unboxed as VU
 import GHC.Generics (Generic)
 import Linear hiding (trace)
 import Data.List (sort)
+import Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
 import Debug.Trace (trace, traceShow, traceShowM)
 
 import qualified ICFP2019.Shape as Shape
@@ -393,24 +395,24 @@ stepAllWorkers ::
   MineProblem -> 
   FullState -> 
   HashMap Int [Action] -> 
-  Either ActionException (FullState, HashMap Int [Action]) 
-stepAllWorkers prob state0 actions = fmap (\(state1, newWorkers, actions) -> 
-  (tickTimeAll $ addWorkers newWorkers state1, actions)) result
+  Either ActionException (FullState, HashMap Int Action, HashMap Int [Action]) 
+stepAllWorkers prob state0 actions = fmap (\(state1, newWorkers, performed, actions) -> 
+  (tickTimeAll $ addWorkers newWorkers state1, performed, actions)) result
   where
-    result :: Either ActionException (FullState, [WorkerState], HashMap Int [Action])
+    result :: Either ActionException (FullState, [WorkerState], HashMap Int Action, HashMap Int [Action])
     result = foldl' (\accum (workerIndex, actions) -> case accum of 
       Left error -> Left error
-      Right (state0, newWorkers, remainingActions) -> case actions of
+      Right (state0, newWorkers, perfed, remainingActions) -> case actions of
         all@(DoClone : rest) -> case doClone prob state0 workerIndex of
           Left error -> Left error
-          Right (Just newWorker) -> Right (state0 & fCollectedBoosters %~ HM.adjust pred Clone, newWorker : newWorkers, HM.insert workerIndex rest remainingActions)
-          Right Nothing -> Right (state0, newWorkers, HM.insert workerIndex all remainingActions)
+          Right (Just newWorker) -> Right (state0 & fCollectedBoosters %~ HM.adjust pred Clone, newWorker : newWorkers, HM.insert workerIndex DoClone perfed, HM.insert workerIndex rest remainingActions)
+          Right Nothing -> Right (state0, newWorkers, perfed, HM.insert workerIndex all remainingActions)
         all@(action : rest) -> case stepSingleWorker prob state0 workerIndex action of
           Left error -> Left error
-          Right Nothing -> Right (state0, newWorkers, HM.insert workerIndex all remainingActions)
-          Right (Just state1) -> Right (state1, newWorkers, HM.insert workerIndex rest remainingActions)
-        [] -> Right (state0, newWorkers, remainingActions))
-      (Right (state0, [], HM.empty))
+          Right Nothing -> Right (state0, newWorkers, perfed, HM.insert workerIndex all remainingActions)
+          Right (Just state1) -> Right (state1, newWorkers, HM.insert workerIndex action perfed, HM.insert workerIndex rest remainingActions)
+        [] -> Right (state0, newWorkers, perfed, remainingActions))
+      (Right (state0, [], mempty, HM.empty))
       (sort $ HM.toList actions)
     addWorkers newWorkers state =
       foldl' addWorker state newWorkers 
@@ -427,5 +429,11 @@ actionsAreMissing state actions =
   
 stepUntilFinished :: MineProblem -> FullState -> HM.HashMap Int [Action] -> Either ActionException FullState
 stepUntilFinished prob state0 action0 = if actionsAreMissing state0 action0 then Right state0 else do
-    (state1, action1) <- stepAllWorkers prob state0 action0 
+    (state1, _, action1) <- stepAllWorkers prob state0 action0 
     stepUntilFinished prob state1 action1
+
+stepUntilFinished' :: MineProblem -> FullState -> HM.HashMap Int (Seq Action) -> HM.HashMap Int [Action] ->
+  Either ActionException (FullState, HM.HashMap Int (Seq Action), HM.HashMap Int [Action])
+stepUntilFinished' prob state0 performed action0 = if actionsAreMissing state0 action0 then return (state0, performed, action0) else do
+    (state1, perfed, action1) <- stepAllWorkers prob state0 action0
+    stepUntilFinished' prob state1 (HM.unionWith (<>) performed (HM.map Seq.singleton perfed)) action1

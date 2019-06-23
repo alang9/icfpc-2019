@@ -48,6 +48,7 @@ parseAction = AP.choice
   , AP.char 'F' *> pure AttachFastWheels
   , AP.char 'L' *> pure AttachDrill
   , AP.char 'R' *> pure Reset
+  , AP.char 'Z' *> pure DoNothing
   , do
       _ <- AP.char 'T'
       _ <- AP.char '('
