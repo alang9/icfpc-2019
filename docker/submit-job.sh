@@ -9,6 +9,7 @@ fi
 SOLVER=$1
 JOB_NAME=$2
 SOLUTION_BUCKET="icfp2019-sol-$JOB_NAME"
+BEST_SOLUTION_BUCKET="icfp2019-solutions"
 
 AWS_ACCOUNT_ID="$(aws sts get-caller-identity --output text --query 'Account')"
 
@@ -33,9 +34,13 @@ cat - >"$JOB_DEFINITION_JSON" <<EOF
         "value": "$SOLUTION_BUCKET"
       },
       {
+        "name": "ICFP2019_BEST_SOLUTION_BUCKET",
+        "value": "$BEST_SOLUTION_BUCKET"
+      },
+      {
         "name": "ICFP2019_SOLVER",
         "value": "$SOLVER"
-    }
+      }
     ]
   }
 }
