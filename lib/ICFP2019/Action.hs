@@ -7,7 +7,7 @@ import Data.Hashable
 import GHC.Generics (Generic)
 import Linear
 import qualified Data.HashMap.Lazy as HM
-import Data.List (foldl')
+import Data.List (foldl', sort, intercalate)
 import Data.HashMap.Lazy (HashMap)
 
 data Action
@@ -77,3 +77,8 @@ serialize AttachFastWheels = "F"
 serialize AttachDrill = "L"
 serialize Reset = "R"
 serialize (Shift (V2 x y)) = "T(" ++ show x ++ "," ++ show y ++ ")"
+
+serializeActions :: HM.HashMap Int [Action] -> String
+serializeActions actions =
+  intercalate "#" $ fmap snd $ sort $ HM.toList $ fmap (concatMap serialize) actions
+

@@ -9,14 +9,15 @@ import Control.Lens
 import qualified Data.Attoparsec.ByteString.Char8 as AP
 import Data.Hashable
 import qualified Data.HashMap.Lazy as HM
-import Data.List (foldl')
 import Data.HashMap.Lazy (HashMap)
+import Data.List (foldl')
 import qualified Data.HashSet as HS
 import Data.HashSet (HashSet)
 import qualified Data.Vector.Unboxed as VU
 import GHC.Generics (Generic)
-import Linear
+import Linear hiding (trace)
 import Data.List (sort)
+import Debug.Trace (trace, traceShow, traceShowM)
 
 import qualified ICFP2019.Shape as Shape
 import ICFP2019.Shape (Shape)
@@ -139,7 +140,7 @@ updateFullStateWith :: (OneWorkerState -> OneWorkerState) -> FullState -> Int ->
 updateFullStateWith f fullstate workerIndex = case selectWorker fullstate workerIndex of
   Nothing -> Nothing
   Just result -> 
-      Just $ updateFullState workerIndex result fullstate
+      Just $ updateFullState workerIndex (f result) fullstate
      
 startingManip :: HashSet (V2 Int)
 startingManip = HS.fromList [V2 0 0, V2 1 0, V2 1 1, V2 1 (-1)]
@@ -172,7 +173,8 @@ initialParser = do
           , _fTimeSpent = 0
           , _fBeaconLocations = mempty
           }
-    let initialSt = maybe fullSt id (updateFullStateWith applyWrapped fullSt 0) 
+    let initialSt = maybe (error "should be unreachable") id (updateFullStateWith applyWrapped fullSt 0) 
+    -- traceShowM $ initialSt
     return (mineProb, initialSt)
   where
     allTiles sha = Shape.toHashSet sha
@@ -405,3 +407,18 @@ stepAllWorkers prob state0 actions = fmap (\(state1, newWorkers, actions) ->
       (sort $ HM.toList actions)
     addWorkers newWorkers state =
       foldl' addWorker state newWorkers 
+
+actionsAreMissing :: FullState -> HM.HashMap Int [Action] -> Bool
+actionsAreMissing state actions =
+  foldl' checkNonemptyActions False (HM.keys $ state ^. fWorkers)
+  where
+    checkNonemptyActions :: Bool -> Int -> Bool
+    checkNonemptyActions prev i = case HM.lookup i actions of
+      Nothing -> True  
+      Just [] -> True
+      Just _ -> prev
+  
+stepUntilFinished :: MineProblem -> FullState -> HM.HashMap Int [Action] -> Either ActionException FullState
+stepUntilFinished prob state0 action0 = if actionsAreMissing state0 action0 then Right state0 else do
+    (state1, action1) <- stepAllWorkers prob state0 action0 
+    stepUntilFinished prob state1 action1

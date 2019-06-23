@@ -12,9 +12,14 @@ import qualified Data.Graph.AStar
 import qualified Data.Sequence as Seq
 import Data.Sequence (Seq)
 import qualified Data.Vector as VB
-import Linear
+import Linear hiding (trace)
 import System.Random.MWC.Distributions
 import System.Random.MWC
+import qualified Data.HashMap.Lazy as HM
+import Data.HashMap.Lazy (HashMap)
+import qualified Data.HashSet as HS
+import Data.HashSet (HashSet)
+import Data.List (foldl', foldl1')
 
 import ICFP2019.State
 import ICFP2019.Action
@@ -39,54 +44,81 @@ import Debug.Trace
 --            [ dist1 (st ^. wwPosition + m) target
 --            | m <- HS.toList $ st ^. wwManipulators
 --            ]
--- 
--- bfs :: Bool -> MineProblem -> MineState -> [Action]
--- bfs allowTurns prob state0 = maybe [] id $ do
---   states <- Data.Graph.AStar.aStar (neighbours . snd)
---     (\_ (_, ((newPos, newOrient), _, _)) -> V2 1 (negate $ length [ () | offset <- manips' newOrient, HS.member (newPos + offset) (state0 ^. unwrapped)]))
---     (heuristicDistance . snd)
---     (\(_, ((pos, orient), _, _)) -> or [HS.member (pos + offset) (state0 ^. unwrapped) | offset <- manips' orient])
---     (DoNothing, ((state0 ^. wwPosition, state0 ^. wwOrientation), state0 ^. activeFastWheels, state0 ^. activeDrill))
---   return $ map fst states
---   where
---     manips = HS.toList $ state0 ^. wwManipulators
---     manips' orient = case mod (orient - state0 ^. wwOrientation) 4 of
---       0 -> manips0
---       1 -> manips1
---       2 -> manips2
---       3 -> manips3
---     rot (V2 x y) = V2 y (-x)
---     (!manips0):(!manips1):(!manips2):(!manips3):_ = iterate (map rot) $ manips
---     neighbours :: ((Point, Int), Int, Int) -> HS.HashSet (Action, ((Point, Int), Int, Int))
---     neighbours ((pos, orient), fw, ad) =
---       HS.fromList $
---         [ if fw > 0 && (open prob state0 (pos + d + d) || (inMine prob (pos + d + d) && ad > 0))
---             then (m, ((pos + d + d, orient), fw', ad'))
---             else (m, ((pos + d, orient), fw', ad'))
---         | (m, d) <- moves, open prob state0 (pos + d) || (inMine prob (pos + d) && ad > 0)
---         ] ++
---         if allowTurns
---           then
---             [ (m, ((pos, mod (orient + d) 4), fw', ad'))
---             | (m, d) <- turns
---             ]
---           else []
---       where
---         fw' = max 0 $ fw - 1
---         ad' = max 0 $ ad - 1
---     moves =
---       [ (MoveLeft, V2 (-1) 0)
---       , (MoveRight, V2 1 0)
---       , (MoveUp, V2 0 1)
---       , (MoveDown, V2 0 (-1))
---       ]
---     turns =
---       [ (TurnCW, 1)
---       , (TurnCCW, -1)
---       ]
---     heuristicDistance :: a -> V2 Int
---     heuristicDistance _ = V2 0 0
--- 
+
+safeLast :: [a] -> Maybe a
+safeLast [] = Nothing
+safeLast [x] = Just x
+safeLast (_ : rest) = safeLast rest
+
+truncateActions :: HM.HashMap Int [Action] -> HM.HashMap Int [Action]
+truncateActions actions =
+  fmap (take minCount) actions
+  where 
+    minCount :: Int
+    minCount = foldl1' min $ fmap length $ HM.elems actions 
+
+bfsMultipleWorkers :: Bool -> MineProblem -> FullState -> HM.HashMap Int [Action]
+bfsMultipleWorkers allowTurns prob state0 =
+  snd $ HM.foldlWithKey' getPath (state0, HM.empty) workers 
+  where 
+    workers = state0 ^. fWorkers 
+    getPath :: (FullState, HM.HashMap Int [Action]) -> Int -> WorkerState -> (FullState, HM.HashMap Int [Action])
+    getPath (fullState, actions) workerIndex workerState = 
+      case target of
+        Nothing -> (fullState, actions)
+        Just target -> (fullState & fUnwrapped %~ HS.delete target, HM.insert workerIndex newActions actions)
+      where
+        (newActions, target) = bfs allowTurns prob (makeOneWorker workerState fullState)
+  
+
+bfs :: Bool -> MineProblem -> OneWorkerState -> ([Action], Maybe Point)
+bfs allowTurns prob state0 = maybe ([], Nothing) id $ do
+  states <- Data.Graph.AStar.aStar (neighbours . snd)
+    (\_ (_, ((newPos, newOrient), _, _)) -> V2 1 (negate $ length [ () | offset <- manips' newOrient, HS.member (newPos + offset) (state0 ^. unwrapped)]))
+    (heuristicDistance . snd)
+    (\(_, ((pos, orient), _, _)) -> or [HS.member (pos + offset) (state0 ^. unwrapped) | offset <- manips' orient])
+    (DoNothing, ((state0 ^. wwPosition, state0 ^. wwOrientation), state0 ^. activeFastWheels, state0 ^. activeDrill))
+  let actions = map fst states 
+  let target = fmap (\(_action, ((finalPos,_),_,_)) -> finalPos) $ safeLast states
+  return (actions, target)
+  where
+    manips = HS.toList $ state0 ^. wwManipulators
+    manips' orient = case mod (orient - state0 ^. wwOrientation) 4 of
+      0 -> manips0
+      1 -> manips1
+      2 -> manips2
+      3 -> manips3
+    rot (V2 x y) = V2 y (-x)
+    (!manips0):(!manips1):(!manips2):(!manips3):_ = iterate (map rot) $ manips
+    neighbours :: ((Point, Int), Int, Int) -> HS.HashSet (Action, ((Point, Int), Int, Int))
+    neighbours ((pos, orient), fw, ad) = HS.fromList $
+      [ if fw > 0 && (open prob state0 (pos + d + d) || (inMine prob (pos + d + d) && ad > 0))
+          then (m, ((pos + d + d, orient), fw', ad'))
+          else (m, ((pos + d, orient), fw', ad'))
+      | (m, d) <- moves, open prob state0 (pos + d) || (inMine prob (pos + d) && ad > 0)
+      ] ++
+      if allowTurns
+        then
+          [ (m, ((pos, mod (orient + d) 4), fw', ad'))
+          | (m, d) <- turns
+          ]
+        else []
+      where
+        fw' = max 0 $ fw - 1
+        ad' = max 0 $ ad - 1
+    moves =
+      [ (MoveLeft, V2 (-1) 0)
+      , (MoveRight, V2 1 0)
+      , (MoveUp, V2 0 1)
+      , (MoveDown, V2 0 (-1))
+      ]
+    turns =
+      [ (TurnCW, 1)
+      , (TurnCCW, -1)
+      ]
+    heuristicDistance :: a -> V2 Int
+    heuristicDistance _ = V2 0 0
+
 -- randomBfs :: forall m. (PrimMonad m) => Gen (PrimState m) -> MineProblem -> MineState -> m [Action]
 -- randomBfs gen prob state0 = do
 --   states <- Data.Graph.AStar.aStarM (neighbours . snd) (\_ _ -> pure 1)

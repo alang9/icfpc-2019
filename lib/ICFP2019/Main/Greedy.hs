@@ -6,6 +6,8 @@ import qualified Data.ByteString.Char8 as C8
 import Data.List
 import System.Environment
 import System.IO
+import Control.Lens
+import qualified Data.HashMap.Lazy as HM
 
 import ICFP2019.State
 import ICFP2019.Action
@@ -13,21 +15,26 @@ import ICFP2019.AStar
 
 import Debug.Trace
 
--- main :: IO ()
--- main = do
---   [desc] <- getArgs
---   descBs <- C8.readFile desc
---   let Right (prob, state0) = AP.parseOnly initialParser descBs
---   hSetBuffering stdout NoBuffering
---   go 0 prob state0
---   putStrLn ""
---   where
---     go turns prob !st
---       | allWrapped st = traceShowM ("turns", turns)
---       | otherwise = case bfs True prob st of
---           [] -> error "bad greedy"
---           acts -> do
---             putStr $ concat $ serialize <$> acts
---             let st' = foldl' (fmap (either (error "oops") id) . step prob) st acts
---             go (turns + length acts) prob st'
--- --   go state0 undefin
+combineActions :: HM.HashMap Int [Action] -> HM.HashMap Int [Action] -> HM.HashMap Int [Action]
+combineActions = HM.unionWith (++) 
+
+runSteps :: MineProblem -> FullState -> HM.HashMap Int [Action] -> IO (HM.HashMap Int [Action], Int)
+runSteps prob !st actionsDone
+  | allWrapped st = pure (actionsDone, st ^. fTimeSpent)
+  | otherwise = 
+      let actions = truncateActions $ bfsMultipleWorkers True prob st in 
+          do
+            let st' = if actionsAreMissing st actions 
+                      then error "bad greedy" 
+                      else either (error "oops") id $ stepUntilFinished prob st actions 
+            runSteps prob st' (combineActions actionsDone actions)
+
+main :: IO ()
+main = do
+  [desc] <- getArgs
+  descBs <- C8.readFile desc
+  let Right (prob, state0) = AP.parseOnly initialParser descBs
+  hSetBuffering stdout NoBuffering
+  (actionsDone, timeSpent) <- runSteps prob state0 HM.empty
+  putStrLn $ serializeActions actionsDone
+  traceShow timeSpent $ putStrLn ""
