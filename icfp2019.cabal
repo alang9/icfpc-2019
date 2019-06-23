@@ -26,7 +26,7 @@ Library
   Exposed-modules:
     ICFP2019.AStar
     ICFP2019.Action
-    ICFP2019.Bresenham
+    ICFP2019.LineOfSight
     ICFP2019.DFS
     ICFP2019.Main.CoinPuzzle
     ICFP2019.Main.Dfs
@@ -55,6 +55,23 @@ Library
     vector-instances,
     primitive,
     mwc-random
+
+Test-suite icfp2019-tests
+  Hs-source-dirs:   tests
+  Main-is:          Main.hs
+  Type:             exitcode-stdio-1.0
+  Default-language: Haskell2010
+  Ghc-options:      -Wall -Werror -rtsopts -threaded
+
+  Other-modules:
+    ICFP2019.LineOfSight.Tests
+
+  Build-depends:
+    base,
+    icfp2019,
+    linear,
+    tasty,
+    tasty-quickcheck
 
 Common exe
   Default-language: Haskell2010
