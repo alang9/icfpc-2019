@@ -31,6 +31,7 @@ Library
     ICFP2019.Main.CoinPuzzle
     ICFP2019.Main.Dfs
     ICFP2019.Main.Greedy
+    ICFP2019.Main.GreedyClone
     ICFP2019.Main.GreedyDfs
     ICFP2019.Main.Sim
     ICFP2019.Main.V0
@@ -80,6 +81,10 @@ Executable greedy
 Executable greedy-dfs
   Import:  exe
   Main-is: GreedyDfs.hs
+
+Executable greedy-clone
+  Import:  exe
+  Main-is: GreedyClone.hs
 
 Executable coin-puzzle
   Import:  exe

@@ -77,6 +77,7 @@ serialize AttachFastWheels = "F"
 serialize AttachDrill = "L"
 serialize Reset = "R"
 serialize (Shift (V2 x y)) = "T(" ++ show x ++ "," ++ show y ++ ")"
+serialize DoClone = "C"
 
 serializeActions :: HM.HashMap Int [Action] -> String
 serializeActions actions =

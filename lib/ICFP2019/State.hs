@@ -403,7 +403,7 @@ stepAllWorkers prob state0 actions = fmap (\(state1, newWorkers, actions) ->
       Right (state0, newWorkers, remainingActions) -> case actions of
         all@(DoClone : rest) -> case doClone prob state0 workerIndex of
           Left error -> Left error
-          Right (Just newWorker) -> Right (state0, newWorker : newWorkers, HM.insert workerIndex rest remainingActions)
+          Right (Just newWorker) -> Right (state0 & fCollectedBoosters %~ HM.adjust pred Clone, newWorker : newWorkers, HM.insert workerIndex rest remainingActions)
           Right Nothing -> Right (state0, newWorkers, HM.insert workerIndex all remainingActions)
         all@(action : rest) -> case stepSingleWorker prob state0 workerIndex action of
           Left error -> Left error
