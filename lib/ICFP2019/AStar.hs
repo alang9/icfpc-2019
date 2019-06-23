@@ -63,11 +63,14 @@ bfsMultipleWorkers ourBfs state0 =
   where 
     workers = state0 ^. fWorkers 
     getPath :: (FullState, HM.HashMap Int [Action]) -> Int -> WorkerState -> (FullState, HM.HashMap Int [Action])
-    getPath (fullState, actions) workerIndex workerState = traceShow (workerIndex, target) $
+    getPath (fullState, actions) workerIndex workerState =
       case target of
         Nothing -> (fullState, HM.insert workerIndex [DoNothing] actions)
-        Just target' -> (fullState & fUnwrapped %~ HS.delete target', HM.insert workerIndex newActions actions)
+        Just target' -> (fullState & fUnwrapped %~ remove (HS.toList $ HS.map ((+) target') manips), HM.insert workerIndex newActions actions)
       where
+        remove [] hs = hs
+        remove (x:xs) hs = remove xs $ HS.delete x hs
+        manips = maybe (error "bfsMultipleWorkers: impossible") id $ workers ^? ix workerIndex . wManipulators
         (newActions, target) = ourBfs (makeOneWorker workerState fullState)
 
 bfsToExactPositions :: [Point] -> Bool -> MineProblem -> OneWorkerState -> ([Action], Maybe Point)

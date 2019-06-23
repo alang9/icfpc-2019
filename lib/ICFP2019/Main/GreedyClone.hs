@@ -8,6 +8,7 @@ import System.Environment
 import System.IO
 import Control.Lens
 import qualified Data.HashMap.Lazy as HM
+import qualified Data.HashSet as HS
 
 import ICFP2019.State
 import ICFP2019.Action
@@ -22,11 +23,11 @@ runSteps :: MineProblem -> FullState -> HM.HashMap Int [Action] -> IO (HM.HashMa
 runSteps prob !st actionsDone
   | allWrapped st = pure (actionsDone, st ^. fTimeSpent)
   | otherwise = do
-      let actions = truncateActions $ bfsMultipleWorkers (bfs True prob) st
-      traceShowM ("f", actions)
+      let actions = truncateActions $ bfsMultipleWorkers (bfs False prob) st
       let st' = if actionsAreMissing st actions 
                 then error $ "bad greedy 5: " ++ show actions
                 else either (error "oops") id $ stepUntilFinished prob st actions 
+      traceShowM ("f", HS.size $ st' ^. fUnwrapped, actions)
       runSteps prob st' (combineActions actionsDone actions)
 
 runStepsClone :: MineProblem -> FullState -> HM.HashMap Int [Action] -> IO (HM.HashMap Int [Action], FullState)
