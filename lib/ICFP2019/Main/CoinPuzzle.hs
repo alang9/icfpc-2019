@@ -2,6 +2,7 @@
 
 module ICFP2019.Main.CoinPuzzle where
 
+import Control.Lens (review)
 import Data.Attoparsec.ByteString
 import System.Environment (getArgs)
 import qualified Data.Attoparsec.ByteString.Char8 as AP
@@ -15,6 +16,7 @@ import System.Random.MWC
 import qualified System.IO as IO
 import qualified ICFP2019.Shape as Shape
 import qualified ICFP2019.State as State
+import ICFP2019.Booster
 
 data Puzzle = Puzzle
   { bNum :: !Int
@@ -141,7 +143,7 @@ data TaskDescription = TaskDescription
     { tdMap       :: [V2 Int]
     , tdStart     :: V2 Int
     , tdObstacles :: [[V2 Int]]
-    , tdBoosters  :: [(State.Booster, V2 Int)]
+    , tdBoosters  :: [(Booster, V2 Int)]
     }
 
 partialSolutionToTaskDescription
@@ -158,12 +160,12 @@ partialSolutionToTaskDescription Puzzle {..} ps = TaskDescription
         (s : b) -> (s, b)
 
     boosterCodes =
-        replicate mNum State.Extension ++
-        replicate fNum State.FastWheels ++
-        replicate dNum State.Drill ++
-        replicate rNum State.Teleport ++
-        replicate xNum State.Mysterious ++
-        replicate cNum State.Clone
+        replicate mNum Extension ++
+        replicate fNum FastWheels ++
+        replicate dNum Drill ++
+        replicate rNum Teleport ++
+        replicate xNum Mysterious ++
+        replicate cNum Clone
 
 unparseTaskDescription :: TaskDescription -> String
 unparseTaskDescription TaskDescription {..} =
@@ -176,14 +178,7 @@ unparseTaskDescription TaskDescription {..} =
 
     unparsePoint (V2 x y) = "(" ++ show x ++ "," ++ show y ++ ")"
 
-    unparseBooster (c, p) = unparseBoosterCode c ++ unparsePoint p
-
-    unparseBoosterCode State.Extension  = "B"
-    unparseBoosterCode State.FastWheels = "F"
-    unparseBoosterCode State.Drill      = "L"
-    unparseBoosterCode State.Mysterious = "X"
-    unparseBoosterCode State.Teleport   = "R"
-    unparseBoosterCode State.Clone      = "C"
+    unparseBooster (c, p) = [review boosterFromCode c] ++ unparsePoint p
 
 main :: IO ()
 main = do

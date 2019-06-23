@@ -11,6 +11,7 @@ import qualified System.IO as IO
 
 import ICFP2019.State
 import ICFP2019.Action
+import ICFP2019.Booster
 
 import Debug.Trace
 
@@ -28,7 +29,7 @@ printState h state actions = do
 
 main :: IO ()
 main = do
-  [desc, sols] <- getArgs
+  [desc, sols, buy] <- getArgs
   descBs <- C8.readFile desc
   let Right (prob, state0) = AP.parseOnly initialParser descBs
   actionBs <- C8.readFile sols
@@ -36,8 +37,10 @@ main = do
         AP.Fail _ _ _ -> error "parsing failed" 
         AP.Partial _ -> error "unexpected partial"
         AP.Done remain actions -> traceShow ("remain", C8.length remain) $ actions 
-  IO.hPutStrLn IO.stderr $ show $ state0 ^. fBoosters
-  go prob 0 state0 actions
+  boosterBag <- readBoosterBag buy
+  let state1 = buyBoosters boosterBag state0
+  IO.hPutStrLn IO.stderr $ show $ state1 ^. fBoosters
+  go prob 0 state1 actions
   where
     go :: MineProblem -> Int -> FullState -> HashMap Int [Action] -> IO ()
     go prob n state0 actions = do

@@ -14,6 +14,7 @@ import qualified Data.HashSet as HS
 import ICFP2019.State
 import ICFP2019.Action
 import ICFP2019.AStar
+import ICFP2019.Booster
 
 import Debug.Trace
 
@@ -63,11 +64,12 @@ runStepsClone prob !st actionsDone
 
 main :: IO ()
 main = do
-  [desc] <- getArgs
+  [desc, buy] <- getArgs
   descBs <- C8.readFile desc
+  boosterBag <- readBoosterBag buy
   let Right (prob, state0) = AP.parseOnly initialParser descBs
   hSetBuffering stdout NoBuffering
-  (actions1, state1) <- runStepsClone prob state0 HM.empty
+  (actions1, state1) <- runStepsClone prob (buyBoosters boosterBag state0) HM.empty
   traceShowM ("actions1", actions1)
   (actionsDone, timeSpent) <- runSteps prob state1 actions1 mempty mempty
   putStrLn $ serializeActions actionsDone

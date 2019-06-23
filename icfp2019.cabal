@@ -26,8 +26,10 @@ Library
   Exposed-modules:
     ICFP2019.AStar
     ICFP2019.Action
+    ICFP2019.Booster
     ICFP2019.LineOfSight
     ICFP2019.DFS
+    ICFP2019.Main.Buyer
     ICFP2019.Main.CoinPuzzle
     ICFP2019.Main.Dfs
     ICFP2019.Main.Greedy
@@ -110,5 +112,9 @@ Executable dfs-clone
   Main-is: DfsClone.hs
 
 Executable coin-puzzle
+  Import:  exe
+  Main-is: CoinPuzzle.hs
+
+Executable buyer
   Import:  exe
   Main-is: CoinPuzzle.hs

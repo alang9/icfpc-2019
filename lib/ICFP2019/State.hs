@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE LambdaCase #-}
 
 module ICFP2019.State where
 
@@ -25,23 +26,13 @@ import qualified ICFP2019.Shape as Shape
 import qualified ICFP2019.LineOfSight as LineOfSight
 import ICFP2019.Shape (Shape)
 import ICFP2019.Action
+import ICFP2019.Booster
 
 type Point = V2 Int
 
 type RelPos = V2 Int
 
 type TimeRemaining = Int
-
-data Booster
-  = Extension
-  | FastWheels
-  | Drill
-  | Teleport
-  | Mysterious
-  | Clone
-  deriving (Show, Eq, Ord, Generic)
-
-instance Hashable Booster
 
 data MineProblem = MineProblem
   { _boundary :: !Shape
@@ -187,12 +178,11 @@ initialParser = do
   where
     allTiles sha = Shape.toHashSet sha
     boosterParser = do
-      whichBooster <- AP.char 'B' *> pure Extension
-        <|> AP.char 'F' *> pure FastWheels
-        <|> AP.char 'L' *> pure Drill
-        <|> AP.char 'X' *> pure Mysterious
-        <|> AP.char 'R' *> pure Teleport
-        <|> AP.char 'C' *> pure Clone
+      boosterCode <- AP.anyChar
+      whichBooster <- maybe
+        (fail $ "Unknown booster: " ++ show boosterCode)
+        return
+        (boosterCode ^? boosterFromCode)
       pt <- pairParser
       return (pt, whichBooster)
     shapeParser = do
@@ -205,6 +195,10 @@ initialParser = do
       y <- AP.signed AP.decimal
       _ <- AP.char ')'
       return $ V2 x y
+
+buyBoosters :: BoosterBag -> FullState -> FullState
+buyBoosters bb s = s
+    & fCollectedBoosters %~ (unBoosterBag . (<> bb) . BoosterBag)
 
 validNewManipulatorPositions :: OneWorkerState -> HashSet Point
 validNewManipulatorPositions state0 = HS.unions [HS.map ((+) dir) $ state0 ^. wwManipulators | dir <- dirs] `HS.difference` (state0 ^. wwManipulators)

@@ -12,6 +12,7 @@ import qualified Data.HashMap.Lazy as HM
 import ICFP2019.State
 import ICFP2019.Action
 import ICFP2019.AStar
+import ICFP2019.Booster
 
 import Debug.Trace
 
@@ -31,10 +32,12 @@ runSteps prob !st actionsDone
 
 main :: IO ()
 main = do
-  [desc] <- getArgs
+  [desc, buy] <- getArgs
   descBs <- C8.readFile desc
+  boosterBag <- readBoosterBag buy
   let Right (prob, state0) = AP.parseOnly initialParser descBs
+      state1 = buyBoosters boosterBag state0
   hSetBuffering stdout NoBuffering
-  (actionsDone, timeSpent) <- runSteps prob state0 HM.empty
+  (actionsDone, timeSpent) <- runSteps prob state1 HM.empty
   putStrLn $ serializeActions actionsDone
   traceShow timeSpent $ putStrLn ""
