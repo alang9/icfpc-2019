@@ -402,14 +402,16 @@ runAStarXHeap graph dist heur goal start val oldHeap = do
       = do
         minElt <- MH.deleteMH (hWaiting s)
         case minElt of
+          Just (_, (x,v)) 
+            | not $ HS.member x (hVisited s) -> 
+              if goal (x, v)
+                then return $ s { hEnd = Just (x, v) }
+                    else foldM (expand (x, v))
+                           (s { hVisited = HS.insert x (hVisited s)})
+                           [neigh | neigh <- HS.toList (graph (x, v)), not (HS.member (fst neigh) (hVisited s))]
+                         >>= aStar'
+            | otherwise -> aStar' s
           Nothing -> return s
-          Just (_, (x,v)) -> 
-            if goal (x, v)
-              then return $ s { hEnd = Just (x, v) }
-                  else foldM (expand (x, v))
-                         (s { hVisited = HS.insert x (hVisited s)})
-                         [neigh | neigh <- HS.toList (graph (x, v)), not (HS.member (fst neigh) (hVisited s))]
-                       >>= aStar'
 
     expand :: (a, v) -> AStarXHeap s a c v -> (a, v) -> ST s (AStarXHeap s a c v)
     expand (xa, xv) s (ya, yv) 
