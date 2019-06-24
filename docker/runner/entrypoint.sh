@@ -26,7 +26,7 @@ echo "Computing score for our solution..." 1>&2
 OUR_SCORE="$(./bin/sim "$PROBLEM_FILE" "$SOLUTION_FILE" "$BUY_FILE" 2>/dev/null)"
 
 echo "Computing score for best solution..." 1>&2
-BEST_SCORE="$(./bin/sim "$PROBLEM_FILE" "$SOLUTION_FILE.best" "$BUY_FILE" 2>/dev/null)"
+BEST_SCORE="$(./bin/sim "$PROBLEM_FILE" "$SOLUTION_FILE.best" "$BUY_FILE" 2>/dev/null || echo 999999)"
 
 echo "Our score: $OUR_SCORE, best score: $BEST_SCORE" 1>&2
 if [[ "$OUR_SCORE" -lt "$BEST_SCORE" ]]; then
