@@ -118,10 +118,10 @@ bfsToExactPositions targets allowTurns prob state0 = maybe ([], Nothing) id $ do
     (!manips0):(!manips1):(!manips2):(!manips3):_ = iterate (map rot) $ manips
     neighbours :: ((Point, Int), Int, Int) -> HS.HashSet (Action, ((Point, Int), Int, Int))
     neighbours ((pos, orient), fw, ad) = HS.fromList $
-      [ if fw > 0 && (open prob state0 (pos + d + d) || (inMine prob (pos + d + d) && ad > 0))
+      [ if fw > 0 && (open prob state0 (pos + d + d) || (inBoundingBox prob (pos + d + d) && ad > 0))
           then (m, ((pos + d + d, orient), fw', ad'))
           else (m, ((pos + d, orient), fw', ad'))
-      | (m, d) <- moves, open prob state0 (pos + d) || (inMine prob (pos + d) && ad > 0)
+      | (m, d) <- moves, open prob state0 (pos + d) || (inBoundingBox prob (pos + d) && ad > 0)
       ] ++
       if allowTurns
         then
@@ -169,10 +169,10 @@ bfs allowTurns prob excluded state0 = maybe ([], Nothing) id $ do
     (!manips0):(!manips1):(!manips2):(!manips3):_ = iterate (map rot) $ manips
     neighbours :: ((Point, Int), Int, Int) -> HS.HashSet (Action, ((Point, Int), Int, Int))
     neighbours ((pos, orient), fw, ad) = HS.fromList $
-      [ if fw > 0 && (open prob state0 (pos + d + d) || (inMine prob (pos + d + d) && ad > 0))
+      [ if fw > 0 && (open prob state0 (pos + d + d) || (inBoundingBox prob (pos + d + d) && ad > 0))
           then (m, ((pos + d + d, orient), fw', ad'))
           else (m, ((pos + d, orient), fw', ad'))
-      | (m, d) <- moves, open prob state0 (pos + d) || (inMine prob (pos + d) && ad > 0)
+      | (m, d) <- moves, open prob state0 (pos + d) || (inBoundingBox prob (pos + d) && ad > 0)
       ] ++
       if allowTurns
         then
@@ -311,10 +311,10 @@ invalidatingBfs allowTurns respect prob plannedCov state0 = do
     (!manips0):(!manips1):(!manips2):(!manips3):_ = iterate (map rot) $ manips
     neighbours :: (BfsState, Int) -> HS.HashSet (BfsState, Int)
     neighbours (BfsState {..}, gen) = HS.fromList $
-      [ if fw > 0 && (open prob state0 (bsPos + d + d) || (inMine prob (bsPos + d + d) && ad > 0))
+      [ if fw > 0 && (open prob state0 (bsPos + d + d) || (inBoundingBox prob (bsPos + d + d) && ad > 0))
           then (BfsState m (bsPos + d + d) bsOrient fw' ad', gen + 1)
           else (BfsState m (bsPos + d) bsOrient fw' ad', gen + 1)
-      | (m, d) <- moves, open prob state0 (bsPos + d) || (inMine prob (bsPos + d) && ad > 0)
+      | (m, d) <- moves, open prob state0 (bsPos + d) || (inBoundingBox prob (bsPos + d) && ad > 0)
       ] ++
       if allowTurns
         then

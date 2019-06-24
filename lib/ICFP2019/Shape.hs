@@ -14,6 +14,7 @@ module ICFP2019.Shape where
     , toAscii
 
     , pointSetToOutline
+    , blockedInBoundingBox
     ) where
     -}
 
@@ -134,6 +135,10 @@ toHashSet shape = HS.fromList
     | p <- pointsInBoundingBox shape
     , member p shape
     ]
+
+blockedInBoundingBox :: Shape -> HS.HashSet (V2 Int)
+blockedInBoundingBox shape = HS.fromList
+  [ p | p <- pointsInBoundingBox shape, not $ member p shape ]
 
 toAscii :: Shape -> String
 toAscii shape = unlines $ do

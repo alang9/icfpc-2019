@@ -154,7 +154,7 @@ initialParser = do
     walls <- AP.sepBy shapeParser (AP.char ';')
     _ <- AP.char '#'
     boos <- AP.sepBy boosterParser (AP.char ';')
-    let blok = foldMap Shape.toHashSet walls
+    let blok = HS.union (foldMap Shape.toHashSet walls) (Shape.blockedInBoundingBox boundary0)
     let wrap = mempty
     let mineProb = MineProblem boundary0
     let initialWorker = WorkerState
@@ -271,7 +271,7 @@ step prob preState0 act = case act of
       state1 <- bar (1, passable prob (rp + state0 ^. wwPosition) state0) $ movePosition rp prob state0
       if state0 ^. activeFastWheels > 0
         then do
-          case bar (2, passable prob (rp + state1 ^. wwPosition) state1, inMine prob (rp + state1 ^. wwPosition), state1 ^. activeDrill > 0) $ movePosition rp prob state1 of
+          case bar (2, passable prob (rp + state1 ^. wwPosition) state1, state1 ^. activeDrill > 0) $ movePosition rp prob state1 of
             Nothing -> return $ state1
             Just state2 -> return $ state2
         else return $ state1
@@ -282,14 +282,13 @@ stepAndTick prob state act = step prob state act
   <&> activeDrill %~ max 0 . pred
   <&> activeFastWheels %~ max 0 . pred
 
+notWall :: OneWorkerState -> Point -> Bool
+notWall state pt = not $ HS.member pt (view blocked state)
+
 passable :: MineProblem -> Point -> OneWorkerState -> Bool
-passable prob pt state0 = if hasDrill then inBoundingBox prob pt else inMine prob pt && notWall
+passable prob pt state0 = if hasDrill then inBoundingBox prob pt else inBoundingBox prob pt && notWall state0 pt
   where
     hasDrill = state0 ^. activeDrill > 0
-    notWall = not $ HS.member pt (view blocked state0)
-
-inMine :: MineProblem -> Point -> Bool
-inMine prob pt = pt `Shape.member` (prob ^. boundary)
 
 inBoundingBox :: MineProblem -> Point -> Bool
 inBoundingBox prob (V2 x y) = x >= x0 && y >= y0 && x < x1 && y < y1
@@ -300,10 +299,7 @@ inBoundingBox prob (V2 x y) = x >= x0 && y >= y0 && x < x1 && y < y1
     shape = (prob ^. boundary)
 
 open :: MineProblem -> OneWorkerState -> Point -> Bool
-open prob state0 pt = inMine && notWall
-  where
-    inMine = pt `Shape.member` (prob ^. boundary)
-    notWall = not $ HS.member pt (view blocked state0)
+open prob state0 pt = inBoundingBox prob pt && (notWall state0 pt)
 
 notWrapped :: OneWorkerState -> Point -> Bool
 notWrapped state0 pt = HS.member pt (state0 ^. unwrapped)-- open prob state0 pt && not (HS.member pt (state0 ^. wrapped))
@@ -347,9 +343,6 @@ allWrapped = HS.null . view fUnwrapped
 
 remainingTiles :: OneWorkerState -> Int
 remainingTiles state0 = HS.size (state0 ^. unwrapped)
-
-numTiles :: MineProblem -> Int
-numTiles = VU.length . VU.filter id . view (boundary . Shape.points)
 
 missingTiles :: FullState -> HashSet Point
 missingTiles = view fUnwrapped
