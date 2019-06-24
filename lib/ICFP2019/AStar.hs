@@ -285,7 +285,7 @@ aStarX graph dist heur goal start val
 invalidatingBfs :: Bool -> Int -> MineProblem -> PlannedCoverage -> OneWorkerState -> Maybe [(Action, [Point])]
 invalidatingBfs allowTurns respect prob plannedCov state0 = do
   states <- aStarX neighbours
-    (\_ s2 -> V3 (if HM.member (bsPos $ fst s2) (HM.filter (/= Mysterious) (state0 ^. boosters)) then -1 else 0) 1 (negate $ length $ newCover s2))
+    (\_ s2 -> V3 (if HM.member (bsPos $ fst s2) (state0 ^. boosters) then -1 else 0) 1 (negate $ length $ newCover s2))
     heuristicDistance
     goal
     initialState
@@ -341,11 +341,8 @@ invalidatingBfs allowTurns respect prob plannedCov state0 = do
       [ (TurnCW, 1)
       , (TurnCCW, -1)
       ]
-    nonMysterious = [ boosterLoc | boosterLoc <- HM.keys (HM.filter (/= Mysterious) (state0 ^. boosters))]
     heuristicDistance :: BfsState -> V3 Int
-    heuristicDistance BfsState{bsPos}
-      | length nonMysterious > 0 = V3 0 (minimum $ map (l1 bsPos) nonMysterious) 0
-      | HS.size (state0 ^. unwrapped) < 1000 && HS.size (state0 ^. unwrapped) > 0 =
-          V3 0 (minimum (map (l1 bsPos) $ HS.toList (state0 ^. unwrapped))) 0
-      | otherwise = V3 0 0 0
+    heuristicDistance BfsState{bsPos} = if HS.size (state0 ^. unwrapped) < 1000 && HS.size (state0 ^. unwrapped) > 0
+      then V3 0 (minimum (map (l1 bsPos) $ HS.toList (state0 ^. unwrapped))) 0
+      else V3 0 0 0
     l1 (V2 x y) (V2 x' y') = abs (x - x') + abs (y - y')
