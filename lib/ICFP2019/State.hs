@@ -406,7 +406,7 @@ doClone prob fullState workerIndex = case selectWorker fullState workerIndex of
     Just Mysterious -> 
       Right $ Just $ WorkerState
           { _wPosition = oneWorkerState ^. wwPosition
-          , _wOrientation = oneWorkerState ^. wwOrientation
+          , _wOrientation = 0 -- oneWorkerState ^. wwOrientation
           , _wManipulators = startingManip
           , _wActiveFastWheels = 0
           , _wActiveDrill = 0

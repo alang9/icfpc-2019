@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE LambdaCase #-}
 module ICFP2019.Main.DfsClone where
 
 import qualified Data.Attoparsec.ByteString as AP
@@ -38,7 +39,7 @@ runSteps prob !st actionsDone actionQueue plannedCoverage
       -- let st' = if missingActions st immediateActions
       --           then error $ "bad greedy 5: " ++ show immediateActions
       --           else either (\exc -> error $ "oops 12 " ++ show exc) id $ stepAllWorkers' prob st immediateActions
-      traceShowM ("f", HS.size $ finalSt ^. fUnwrapped, immediateActions, HM.map length newQueue, finalSt ^. fCollectedBoosters)
+      traceShowM ("f", HS.size $ finalSt ^. fUnwrapped, immediateActions, HM.map length newQueue, finalSt ^. fCollectedBoosters, HM.map (view wPosition) $ finalSt ^. fWorkers)
       runSteps prob finalSt (appendActions actionsDone immediateActions) newQueue newPlannedCoverage
 
 missingActions :: FullState -> HM.HashMap WorkerId Action -> Bool
@@ -68,7 +69,7 @@ foo prob (actionAcc, queueAcc, plannedCoverage, fullState) workerId _ = case cur
     pp = case invalidated of
       [] -> id
       _ -> trace $ unwords [show workerId, " stole work from ", show invalidated]
-    fp = traceShow ("found plan of length", length newPlan, newPlan, thisWorkerState)
+    fp = traceShow ("found plan of length", length newPlan, newPlan, thisWorkerState, fullState ^. fCollectedBoosters, HM.map (view wPosition) $ fullState ^. fWorkers)
     currentQueue = maybe [] id $ HM.lookup workerId queueAcc
     invalidatedCoverage = foldl' (\cov wid -> HM.filter ((/= wid) . fst) cov) newPlannedCoverage invalidated
     cleanedCoverage = HM.filter ((/= workerId) . fst) plannedCoverage
@@ -91,7 +92,7 @@ findPlan :: MineProblem -> PlannedCoverage -> OneWorkerState -> Maybe [(Action, 
 findPlan = invalidatingBfs False 0
 
 findPlanDfs :: MineProblem -> PlannedCoverage -> OneWorkerState -> Maybe [(Action, [Point])]
-findPlanDfs prob cov initial = boundedDfs prob (boundedInvalidatingBfs 40 False 5 prob cov) 1 initial
+findPlanDfs prob cov initial = boundedDfs prob (boundedInvalidatingBfs 40 False 20 prob cov) 1 initial
 
 boundedInvalidatingBfs :: Int -> Bool -> Int -> MineProblem -> PlannedCoverage -> OneWorkerState -> Maybe [(Action, [Point])]
 boundedInvalidatingBfs stoppingDepth allowTurns respect prob cov initialSt = go stoppingDepth initialSt
@@ -119,10 +120,13 @@ runStepsClone prob !st actionsDone
       runStepsClone prob st' (combineActions actionsDone $ HM.map Seq.fromList actions)
   | otherwise = do
       traceShowM ("foo", st ^. fTimeSpent)
-      let actions = bfsMultipleWorkers
+      let preActions = bfsMultipleWorkers
             (bfsToExactPositions (cloneLocations ++ mysteriousLocations) True prob) st
+      let actions = flip HM.map preActions $ \case
+            [DoNothing] -> []
+            xs -> xs
       let actions2 = truncateActions $ snd $ sortedFoldl' go (HM.lookupDefault 0 Clone $ st ^. fCollectedBoosters, actions) (st ^. fWorkers)
-      traceShowM ("foo", actions, actions2, HM.lookup Clone $ st ^. fCollectedBoosters)
+      traceShowM ("foo4", actions, actions2, HM.lookup Clone $ st ^. fCollectedBoosters)
       let st' = if actionsAreMissing st actions2
                   then error $ "bad greedy 3: " ++ show (actions, actions2, cloneLocations, mysteriousLocations, st ^. fWorkers)
                   else either (error "oops 3") id $ stepUntilFinished prob st actions2
