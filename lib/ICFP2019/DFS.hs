@@ -32,18 +32,22 @@ dfsOneStep prob state0 = mapMaybe go $ interestingActions prob state0
       Left ex -> error $ "dfsOneStep: " ++ show ex
       Right state1 -> Just (act, HS.toList (HS.difference (state0 ^. unwrapped) (state1 ^. unwrapped)), state1)
 
-boundedDfs :: MineProblem -> (OneWorkerState -> Maybe [(Action, [Point])]) -> Int -> OneWorkerState -> Maybe [(Action, [Point])]
+boundedDfs :: (Monad m) => 
+  MineProblem -> 
+  (OneWorkerState -> m (Maybe [(Action, [Point])])) -> 
+  Int -> 
+  OneWorkerState -> 
+  m (Maybe [(Action, [Point])])
 boundedDfs prob descend maxDepth initial =
     go maxDepth initial
   where
     fitness = sum . map (length . snd)
-    initialFitness = maybe 0 fitness $ descend initial
     go remDepth st
       | remDepth <= 0 = descend st
-      | otherwise =
-            if fitness best > 0 then Just best else Nothing
+      | otherwise = do
+            options <- getOptions neighbours 
+            let best = maximumBy (comparing fitness) options
+            if fitness best > 0 then return $ Just best else return $ Nothing
           where
-            best = maximumBy (comparing fitness) options
             neighbours = dfsOneStep prob st
-            options :: [[(Action, [Point])]]
-            options = map (\(act, covered, st') -> (:) (act, covered) $ maybe [] id $ go (remDepth - 1) st' ) neighbours
+            getOptions neighbours = mapM (\(act, covered, st') -> fmap ((:) (act, covered)) $ fmap (maybe [] id) $ go (remDepth - 1) st' ) neighbours

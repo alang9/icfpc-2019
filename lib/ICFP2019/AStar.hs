@@ -69,6 +69,7 @@ truncateActions actions =
     minCount = foldl1' min $ fmap length $ HM.elems actions 
 
 sortedFoldl' f acc0 workers = foldl' (\acc (wid, ws) -> f acc wid ws) acc0 $ sort $ HM.toList workers
+sortedFoldM f acc0 workers = foldM (\acc (wid, ws) -> f acc wid ws) acc0 $ sort $ HM.toList workers
 
 bfsMultipleWorkers :: (OneWorkerState -> ([Action], Maybe Point)) -> FullState -> HM.HashMap Int [Action]
 bfsMultipleWorkers ourBfs state0 =

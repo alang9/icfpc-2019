@@ -12,6 +12,9 @@ import System.IO
 import Control.Lens
 import qualified Data.HashMap.Lazy as HM
 import qualified Data.HashSet as HS
+import qualified MHeap as MH
+import Linear hiding (trace)
+import Control.Monad.ST
 
 import ICFP2019.State
 import ICFP2019.Action
@@ -30,11 +33,12 @@ combineActions = HM.unionWith (<>)
 runSteps :: MineProblem -> FullState -> HM.HashMap WorkerId (Seq Action) ->
   HM.HashMap WorkerId [(Action, [Point])] -> -- Actions planned for each worker, and the points that they should wrap
   HM.HashMap Point (WorkerId, Int) -> -- points that are planned to be wrapped, and which worker plans to wrap it, and in which generation
-  IO (HM.HashMap Int (Seq Action), Int)
+  ST s (HM.HashMap Int (Seq Action), Int)
 runSteps prob !st actionsDone actionQueue plannedCoverage
   | allWrapped st = pure (actionsDone, st ^. fTimeSpent)
   | otherwise = do
-      let (immediateActions, newQueue, newPlannedCoverage, finalSt') = sortedFoldl' (foo prob) (mempty, actionQueue, plannedCoverage, st) $ st ^. fWorkers
+      mHeap <- MH.newMH 1000000 
+      (immediateActions, newQueue, newPlannedCoverage, finalSt') <- sortedFoldM (foo mHeap prob) (mempty, actionQueue, plannedCoverage, st) $ st ^. fWorkers
       let finalSt = tickTimeAll finalSt'
       -- let st' = if missingActions st immediateActions
       --           then error $ "bad greedy 5: " ++ show immediateActions
@@ -52,33 +56,35 @@ missingActions state actions =
       Just _ -> prev
 
 foo ::
+  MH.MHeap s (V3 Int) (BfsState, Int) ->
   MineProblem ->
   (HM.HashMap WorkerId Action, HM.HashMap WorkerId [(Action, [Point])], PlannedCoverage, FullState) ->
   WorkerId ->
-  a -> -- [(Action, [Point])] ->
-  (HM.HashMap WorkerId Action, HM.HashMap WorkerId [(Action, [Point])], PlannedCoverage, FullState)
-foo prob (actionAcc, queueAcc, plannedCoverage, fullState) workerId _ = case currentQueue of
+  a ->
+  ST s (HM.HashMap WorkerId Action, HM.HashMap WorkerId [(Action, [Point])], PlannedCoverage, FullState)
+foo mHeap prob (actionAcc, queueAcc, plannedCoverage, fullState) workerId _ = case currentQueue of
   ((act, _):remQueue) ->
-        (HM.insert workerId act actionAcc, HM.insert workerId remQueue queueAcc, plannedCoverage, applyAction "2" act)
-  _ -> trace ("finding new work for: " ++ show workerId) $ case newPlan of
-    ((act, _):remQueue) -> fp $ pp (HM.insert workerId act actionAcc, HM.insert workerId remQueue cleanedQueueAcc, invalidatedCoverage, applyAction "1" act) -- Maybe remove new invalidate guys from queue and coverage
-    [] -> (HM.insert workerId DoNothing actionAcc, HM.insert workerId (replicate 50 (DoNothing, [])) queueAcc, cleanedCoverage, fullState) -- TODO: check cleanedCoverage == invalidatedCoverage
+        return $ (HM.insert workerId act actionAcc, HM.insert workerId remQueue queueAcc, plannedCoverage, applyAction "2" act)
+  _ -> do
+      newPlan <- getNewPlan
+      let (newPlannedCoverage, invalidated) = updateCoverage workerId (fullState ^. fTimeSpent) newPlan cleanedCoverage
+      let invalidatedCoverage = foldl' (\cov wid -> HM.filter ((/= wid) . fst) cov) newPlannedCoverage invalidated
+      let fp = traceShow ("found plan of length", length newPlan, newPlan, thisWorkerState, fullState ^. fCollectedBoosters, HM.map (view wPosition) $ fullState ^. fWorkers)
+      let pp = case invalidated of
+                    [] -> id
+                    _ -> trace $ unwords [show workerId, " stole work from ", show invalidated]
+      let cleanedQueueAcc = foldl' (\q wid -> HM.delete wid q) queueAcc invalidated
+      trace ("finding new work for: " ++ show workerId) $ case newPlan of
+        ((act, _):remQueue) -> return $ fp $ pp (HM.insert workerId act actionAcc, HM.insert workerId remQueue cleanedQueueAcc, invalidatedCoverage, applyAction "1" act) -- Maybe remove new invalidate guys from queue and coverage
+        [] -> return $ (HM.insert workerId DoNothing actionAcc, HM.insert workerId (replicate 50 (DoNothing, [])) queueAcc, cleanedCoverage, fullState) -- TODO: check cleanedCoverage == invalidatedCoverage
   where
     applyAction str act = either (\exc -> error $ show ("ntoehu: ", str, workerId, exc, act)) (maybe (error "omg") id) $
       stepSingleWorker prob fullState workerId act
-    pp = case invalidated of
-      [] -> id
-      _ -> trace $ unwords [show workerId, " stole work from ", show invalidated]
-    fp = traceShow ("found plan of length", length newPlan, newPlan, thisWorkerState, fullState ^. fCollectedBoosters, HM.map (view wPosition) $ fullState ^. fWorkers)
     currentQueue = maybe [] id $ HM.lookup workerId queueAcc
-    invalidatedCoverage = foldl' (\cov wid -> HM.filter ((/= wid) . fst) cov) newPlannedCoverage invalidated
     cleanedCoverage = HM.filter ((/= workerId) . fst) plannedCoverage
     thisWorkerState = maybe (error "never") id $ fullState ^? fWorkers . ix workerId
-    invalidated :: [WorkerId]
-    (newPlannedCoverage, invalidated) = updateCoverage workerId (fullState ^. fTimeSpent) newPlan cleanedCoverage
-    newPlan = maybe [] id $
-        findPlanDfs prob cleanedCoverage $ makeOneWorker thisWorkerState fullState
-    cleanedQueueAcc = foldl' (\q wid -> HM.delete wid q) queueAcc invalidated
+    getNewPlan = maybe [] id <$>
+        findPlanDfs mHeap prob cleanedCoverage (makeOneWorker thisWorkerState fullState)
 
 updateCoverage :: WorkerId -> Int -> [(Action, [Point])] -> PlannedCoverage -> (PlannedCoverage, [WorkerId])
 updateCoverage myId gen plan cov0 = foldl' go (cov0, []) $ concat $ zipWith (\g (_, pts) -> (,) g <$> pts) [gen+1..] plan
@@ -91,21 +97,32 @@ updateCoverage myId gen plan cov0 = foldl' go (cov0, []) $ concat $ zipWith (\g 
 findPlan :: MineProblem -> PlannedCoverage -> OneWorkerState -> Maybe [(Action, [Point])]
 findPlan = invalidatingBfs False 0
 
-findPlanDfs :: MineProblem -> PlannedCoverage -> OneWorkerState -> Maybe [(Action, [Point])]
-findPlanDfs prob cov initial = boundedDfs prob (boundedInvalidatingBfs 40 False 20 prob cov) 1 initial
+findPlanDfs :: MH.MHeap s (V3 Int) (BfsState, Int) -> MineProblem -> PlannedCoverage -> OneWorkerState -> ST s (Maybe [(Action, [Point])])
+findPlanDfs mHeap prob cov initial = boundedDfs prob (boundedInvalidatingBfs mHeap 40 False 20 prob cov) 1 initial
 
-boundedInvalidatingBfs :: Int -> Bool -> Int -> MineProblem -> PlannedCoverage -> OneWorkerState -> Maybe [(Action, [Point])]
-boundedInvalidatingBfs stoppingDepth allowTurns respect prob cov initialSt = go stoppingDepth initialSt
+boundedInvalidatingBfs :: 
+    MH.MHeap s (V3 Int) (BfsState, Int) -> 
+    Int -> 
+    Bool -> 
+    Int -> 
+    MineProblem -> 
+    PlannedCoverage -> 
+    OneWorkerState -> 
+    ST s (Maybe [(Action, [Point])])
+boundedInvalidatingBfs mHeap stoppingDepth allowTurns respect prob cov initialSt = go stoppingDepth initialSt
   where
-    go depth st = case invalidatingBfs allowTurns respect prob cov st of
-      Nothing -> Nothing
-      Just [] -> error "what"
-      Just path
-        | length path >= depth -> Just path
-        | otherwise -> Just $ path ++ nextPaths
-        where
-          nextPaths = maybe [] id $ go (depth - length path) newSt
-          newSt = foldl' (\st' (act, _) -> either (\exc -> error $ "boundedInvalidatingBfs: " ++ show exc) id (stepAndTick prob st' act)) st path
+    go depth st = do
+      invalidatedBfsResult <- invalidatingBfsHeap allowTurns respect prob cov st mHeap
+      case invalidatedBfsResult of
+        Nothing -> return Nothing
+        Just [] -> error "what"
+        Just path
+          | length path >= depth -> return $ Just path
+          | otherwise -> do
+            nextPaths <- maybe [] id <$> go (depth - length path) newSt
+            return (Just $ path ++ nextPaths)
+          where
+            newSt = foldl' (\st' (act, _) -> either (\exc -> error $ "boundedInvalidatingBfs: " ++ show exc) id (stepAndTick prob st' act)) st path
 
 runStepsClone :: MineProblem -> FullState -> HM.HashMap Int (Seq Action) -> IO (HM.HashMap Int (Seq Action), FullState)
 runStepsClone prob !st actionsDone
@@ -149,6 +166,6 @@ main = do
   hSetBuffering stdout NoBuffering
   (actions1, state1) <- runStepsClone prob (buyBoosters boosterBag state0) HM.empty
   traceShowM ("actions1", actions1)
-  (actionsDone, ts) <- runSteps prob state1 actions1 mempty mempty
+  (actionsDone, ts) <- return $ runST $ runSteps prob state1 actions1 mempty mempty
   putStrLn $ serializeActions $ HM.map toList actionsDone
   traceShow ts $ putStrLn ""
