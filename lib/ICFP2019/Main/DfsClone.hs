@@ -62,7 +62,7 @@ foo prob (actionAcc, queueAcc, plannedCoverage, fullState) workerId _ = case cur
         (HM.insert workerId act actionAcc, HM.insert workerId remQueue queueAcc, plannedCoverage, applyAction "2" act)
   _ -> trace ("finding new work for: " ++ show workerId) $ case newPlan of
     ((act, _):remQueue) -> fp $ pp (HM.insert workerId act actionAcc, HM.insert workerId remQueue cleanedQueueAcc, invalidatedCoverage, applyAction "1" act) -- Maybe remove new invalidate guys from queue and coverage
-    [] -> (HM.insert workerId DoNothing actionAcc, HM.insert workerId (replicate 50 (DoNothing, [])) queueAcc, cleanedCoverage, fullState) -- TODO: check cleanedCoverage == invalidatedCoverage
+    [] -> (HM.insert workerId DoNothing actionAcc, HM.insert workerId (replicate 200 (DoNothing, [])) queueAcc, cleanedCoverage, fullState) -- TODO: check cleanedCoverage == invalidatedCoverage
   where
     applyAction str act = either (\exc -> error $ show ("ntoehu: ", str, workerId, exc, act)) (maybe (error "omg") id) $
       stepSingleWorker prob fullState workerId act

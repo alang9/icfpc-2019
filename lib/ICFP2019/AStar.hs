@@ -338,4 +338,7 @@ invalidatingBfs allowTurns respect prob plannedCov state0 = do
       , (TurnCCW, -1)
       ]
     heuristicDistance :: BfsState -> V3 Int
-    heuristicDistance _ = V3 0 0 0
+    heuristicDistance BfsState{bsPos} = if HS.size (state0 ^. unwrapped) < 1000 && HS.size (state0 ^. unwrapped) > 0
+      then V3 (minimum (map (l1 bsPos) $ HS.toList (state0 ^. unwrapped))) 0 0
+      else V3 0 0 0
+    l1 (V2 x y) (V2 x' y') = abs (x - x') + abs (y - y')
