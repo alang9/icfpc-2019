@@ -36,14 +36,14 @@ boundedDfs :: MineProblem -> (OneWorkerState -> Maybe [(Action, [Point])]) -> In
 boundedDfs prob descend maxDepth initial =
     go maxDepth initial
   where
-    fitness = sum . map (length . snd)
+    fitness path = V2 (negate . sum $ map (length . snd) path) (length path)
     initialFitness = maybe 0 fitness $ descend initial
     go remDepth st
       | remDepth <= 0 = descend st
       | otherwise =
-            if fitness best > 0 then Just best else Nothing
+            if fitness best < 0 then Just best else Nothing
           where
-            best = maximumBy (comparing fitness) options
+            best = minimumBy (comparing fitness) options
             neighbours = dfsOneStep prob st
             options :: [[(Action, [Point])]]
             options = map (\(act, covered, st') -> (:) (act, covered) $ maybe [] id $ go (remDepth - 1) st' ) neighbours

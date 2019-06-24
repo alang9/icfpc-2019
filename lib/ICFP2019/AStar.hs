@@ -24,6 +24,7 @@ import GHC.Generics (Generic)
 
 import ICFP2019.State
 import ICFP2019.Action
+import ICFP2019.Booster
 import qualified ICFP2019.LineOfSight as LineOfSight
 
 import Debug.Trace
@@ -284,13 +285,16 @@ aStarX graph dist heur goal start val
 invalidatingBfs :: Bool -> Int -> MineProblem -> PlannedCoverage -> OneWorkerState -> Maybe [(Action, [Point])]
 invalidatingBfs allowTurns respect prob plannedCov state0 = do
   states <- aStarX neighbours
-    (\_ s2 -> V3 1 (if HM.member (bsPos $ fst s2) (state0 ^. boosters) then -1 else 0) (negate $ length $ newCover s2))
+    (\_ s2 -> V3 (if HM.member (bsPos $ fst s2) (state0 ^. boosters) then -1 else 0) 1 (negate $ length $ newCover s2))
     heuristicDistance
-    (\s -> length (newCover s) > 0)
+    goal
     initialState
     (state0 ^. timeSpent)
   return $ map (\s -> (bsAction (fst s), newCover s)) states
   where
+    goal s =
+          length (newCover s) > 0
+            || ((case HM.lookup (bsPos $ fst s) (state0 ^. boosters) of Nothing -> False; Just Mysterious -> False; Just _ -> True) && (bsPos (fst s) /= state0 ^. wwPosition) )
     newCover (BfsState {bsPos, bsOrient}, gen) =
       [ pos
       | offset <- manips' bsOrient
@@ -339,6 +343,6 @@ invalidatingBfs allowTurns respect prob plannedCov state0 = do
       ]
     heuristicDistance :: BfsState -> V3 Int
     heuristicDistance BfsState{bsPos} = if HS.size (state0 ^. unwrapped) < 1000 && HS.size (state0 ^. unwrapped) > 0
-      then V3 (minimum (map (l1 bsPos) $ HS.toList (state0 ^. unwrapped))) 0 0
+      then V3 0 (minimum (map (l1 bsPos) $ HS.toList (state0 ^. unwrapped))) 0
       else V3 0 0 0
     l1 (V2 x y) (V2 x' y') = abs (x - x') + abs (y - y')
