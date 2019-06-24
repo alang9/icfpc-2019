@@ -20,7 +20,7 @@ echo "Storing solution in bucket..." 1>&2
 aws s3 cp "./$SOLUTION_FILE" "s3://$ICFP2019_SOLUTION_BUCKET/$SOLUTION_FILE"
 
 echo "Downloading best solution..." 1>&2
-aws s3 cp "s3://$ICFP2019_BEST_SOLUTION_BUCKET/$SOLUTION_FILE" "./$SOLUTION_FILE.best"
+aws s3 cp "s3://$ICFP2019_BEST_SOLUTION_BUCKET/$SOLUTION_FILE" "./$SOLUTION_FILE.best" || true
 
 echo "Computing score for our solution..." 1>&2
 OUR_SCORE="$(./bin/sim "$PROBLEM_FILE" "$SOLUTION_FILE" "$BUY_FILE" 2>/dev/null)"

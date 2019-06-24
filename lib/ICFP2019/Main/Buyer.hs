@@ -28,7 +28,8 @@ initialMassBuy numProblems =
 
 buyStrategy :: Int -> Int -> MassBuy
 buyStrategy balance numProblems =
-    go (initialMassBuy numProblems) balance (cycle [1 .. numProblems])
+    go (initialMassBuy numProblems) balance $
+        [220, 220 - 1 .. 1] ++ cycle [300, 300 - 1 .. 1]
   where
     go acc _ [] = acc
     go acc bal (n : ns)

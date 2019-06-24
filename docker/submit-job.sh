@@ -9,7 +9,7 @@ fi
 SOLVER=$1
 JOB_NAME=$2
 SOLUTION_BUCKET="icfp2019-sol-$JOB_NAME"
-BEST_SOLUTION_BUCKET="icfp2019-solutions"
+BEST_SOLUTION_BUCKET="icfp2019-best-sols-01"
 
 AWS_ACCOUNT_ID="$(aws sts get-caller-identity --output text --query 'Account')"
 
