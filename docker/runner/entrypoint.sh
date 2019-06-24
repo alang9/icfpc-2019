@@ -26,10 +26,10 @@ echo "Computing score for our solution..." 1>&2
 OUR_SCORE="$(./bin/sim "$PROBLEM_FILE" "$SOLUTION_FILE" "$BUY_FILE" 2>/dev/null)"
 
 echo "Computing score for best solution..." 1>&2
-BEST_SCORE="$(./bin/sim "$PROBLEM_FILE" "$SOLUTION_FILE.best" "$BUY_FILE" 2>/dev/null || echo 999999)"
+BEST_SCORE="$(./bin/sim "$PROBLEM_FILE" "$SOLUTION_FILE.best" "$BUY_FILE" 2>/dev/null || echo undefined)"
 
 echo "Our score: $OUR_SCORE, best score: $BEST_SCORE" 1>&2
-if [[ "$OUR_SCORE" -lt "$BEST_SCORE" ]]; then
+if [[ "$BEST_SCORE" = "undefined" ]] || [[ "$OUR_SCORE" -lt "$BEST_SCORE" ]]; then
     echo "Replacing best solution..." 1>&2
     aws s3 cp "./$SOLUTION_FILE" "s3://$ICFP2019_BEST_SOLUTION_BUCKET/$SOLUTION_FILE"
     aws s3 cp "./$BUY_FILE" "s3://$ICFP2019_BEST_SOLUTION_BUCKET/$BUY_FILE"
