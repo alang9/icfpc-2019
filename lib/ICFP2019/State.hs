@@ -8,6 +8,7 @@ module ICFP2019.State where
 
 import Control.Applicative
 import Control.Lens
+import Control.Monad
 import qualified Data.Attoparsec.ByteString.Char8 as AP
 import Data.Hashable
 import qualified Data.HashMap.Lazy as HM
@@ -262,12 +263,15 @@ step prob preState0 act = case act of
       Right $ applyWrapped prob $ state0 & wwPosition .~ pos
     else Left InvalidShift
   where
+    bar foo = if (state0 ^. wwPosition == V2 40 156)
+      then traceShow ("bar", foo)
+      else id
     state0 = getBooster (preState0 ^. wwPosition) preState0
     doMove rp = maybe (Left NoSpace) Right $ do
-      state1 <- movePosition rp prob state0
+      state1 <- bar (1, passable prob (rp + state0 ^. wwPosition) state0) $ movePosition rp prob state0
       if state0 ^. activeFastWheels > 0
         then do
-          case movePosition rp prob state1 of
+          case bar (2, passable prob (rp + state1 ^. wwPosition) state1, inMine prob (rp + state1 ^. wwPosition), state1 ^. activeDrill > 0) $ movePosition rp prob state1 of
             Nothing -> return $ state1
             Just state2 -> return $ state2
         else return $ state1
@@ -279,13 +283,21 @@ stepAndTick prob state act = step prob state act
   <&> activeFastWheels %~ max 0 . pred
 
 passable :: MineProblem -> Point -> OneWorkerState -> Bool
-passable prob pt state0 = inMine prob pt && (notWall || hasDrill)
+passable prob pt state0 = if hasDrill then inBoundingBox prob pt else inMine prob pt && notWall
   where
     hasDrill = state0 ^. activeDrill > 0
     notWall = not $ HS.member pt (view blocked state0)
 
 inMine :: MineProblem -> Point -> Bool
 inMine prob pt = pt `Shape.member` (prob ^. boundary)
+
+inBoundingBox :: MineProblem -> Point -> Bool
+inBoundingBox prob (V2 x y) = x >= x0 && y >= y0 && x < x1 && y < y1
+  where
+    (V2 x0 y0) = shape ^. Shape.bottomLeft
+    x1 = x0 + shape ^. Shape.width
+    y1 = y0 + shape ^. Shape.height
+    shape = (prob ^. boundary)
 
 open :: MineProblem -> OneWorkerState -> Point -> Bool
 open prob state0 pt = inMine && notWall
