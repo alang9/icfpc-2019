@@ -44,16 +44,16 @@ main = do
   go prob 0 state1 actions
   where
     go :: MineProblem -> Int -> FullState -> HashMap Int [Action] -> IO ()
-    go prob n state0 actions = do
-      if allWrapped state0
-        then do
-          IO.hPutStrLn IO.stderr $ "Completed after " ++ show n ++ " steps"
-          IO.hPutStrLn IO.stderr $ "Remaining actions: " ++ show actions
-          IO.hPutStrLn IO.stderr $ "Misssing tiles: " ++ show (missingTiles state0)
-          print n
-        else do
-          printState IO.stderr state0 actions
-          case stepAllWorkers prob state0 actions of
-              Left exc -> error $ "sim exception: " ++ show exc
-              Right (state1, _, act1) -> do
-                go prob (n + 1) state1 act1
+    go prob n state0 actions
+      | allWrapped state0 = do
+              IO.hPutStrLn IO.stderr $ "Completed after " ++ show n ++ " steps"
+              IO.hPutStrLn IO.stderr $ "Remaining actions: " ++ show actions
+              IO.hPutStrLn IO.stderr $ "Misssing tiles: " ++ show (missingTiles state0)
+              print n
+      | actionsAreMissing state0 actions = error "Missing actions"
+      | otherwise = do
+              printState IO.stderr state0 actions
+              case stepAllWorkers prob state0 actions of
+                  Left exc -> error $ "sim exception: " ++ show exc
+                  Right (state1, _, act1) -> do
+                    go prob (n + 1) state1 act1
