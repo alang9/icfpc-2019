@@ -5,9 +5,9 @@ Synopsis:            ICFP 2019 Contest
 Description:         ICFP 2019 Contest
 License:             BSD-3-Clause
 License-file:        LICENSE
-Author:              Adam Bratschi-Kaye, Akio Takano, Alex Lang, Jasper Van der Jeugt
+Author:              Adam Bratschi-Kaye, Alex Lang, Jasper Van der Jeugt
 Maintainer:          me@alang.ca
-Copyright:           2019 Adam Bratschi-Kaye, Akio Takano, Alex Lang, Jasper Van der Jeugt
+Copyright:           2019 Adam Bratschi-Kaye, Alex Lang, Jasper Van der Jeugt
 Homepage:            http://github.com/alang9/icfp-2019
 Bug-reports:         http://github.com/alang9/icfp-2019/issues
 Category:            Data
